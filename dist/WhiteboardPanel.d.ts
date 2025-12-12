@@ -11,7 +11,6 @@ export declare class WhiteboardPanel {
     static createFromDocument(context: vscode.ExtensionContext, panel: vscode.WebviewPanel, document: vscode.TextDocument): WhiteboardPanel;
     private constructor();
     private _setupFileWatcher;
-    private _notifyFileChangedWithContent;
     private _handleFileRename;
     private _notifyFileDeleted;
     private _notifyFileChanged;

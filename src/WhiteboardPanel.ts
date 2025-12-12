@@ -161,16 +161,6 @@ export class WhiteboardPanel {
 
         this._disposables.push(this._fileWatcher);
 
-        // Listen for real-time document changes (while typing, before save)
-        vscode.workspace.onDidChangeTextDocument(async (e) => {
-            if (e.document.languageId === 'markdown' || e.document.fileName.endsWith('.md')) {
-                // Debounce: only notify if there are actual content changes
-                if (e.contentChanges.length > 0) {
-                    await this._notifyFileChangedWithContent(e.document.uri, e.document.getText());
-                }
-            }
-        }, null, this._disposables);
-
         // Also listen for document save events (more reliable for editor changes)
         vscode.workspace.onDidSaveTextDocument(async (document) => {
             if (document.languageId === 'markdown' || document.fileName.endsWith('.md')) {
@@ -182,39 +172,6 @@ export class WhiteboardPanel {
         vscode.workspace.onDidRenameFiles(async (e) => {
             await this._handleFileRename(e.files);
         }, null, this._disposables);
-    }
-
-    private async _notifyFileChangedWithContent(uri: vscode.Uri, content: string) {
-        try {
-            const state = this._loadState();
-            const filePath = uri.fsPath;
-
-            // Check if any card is using this file
-            const matchingCards = state.cards.filter((card: Card) => {
-                if (path.isAbsolute(card.filePath)) {
-                    return card.filePath === filePath;
-                } else {
-                    const workspaceFolders = vscode.workspace.workspaceFolders;
-                    if (workspaceFolders) {
-                        const fullCardPath = path.join(workspaceFolders[0].uri.fsPath, card.filePath);
-                        return fullCardPath === filePath;
-                    }
-                }
-                return false;
-            });
-
-            // Notify webview with the current editor content
-            for (const card of matchingCards) {
-                this._panel.webview.postMessage({
-                    command: 'fileChanged',
-                    cardId: card.id,
-                    filePath: card.filePath,
-                    content: content
-                });
-            }
-        } catch (error) {
-            // Ignore errors
-        }
     }
 
     private async _handleFileRename(files: readonly { oldUri: vscode.Uri; newUri: vscode.Uri }[]) {
@@ -1122,6 +1079,25 @@ export class WhiteboardPanel {
             resize: none;
             outline: none;
             font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            overflow-y: auto;
+        }
+
+        /* Custom scrollbar for card textarea */
+        .card-textarea::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .card-textarea::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .card-textarea::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
+        }
+
+        .card-textarea::-webkit-scrollbar-thumb:hover {
+            background: #555;
         }
 
         .card-resize-handle {
