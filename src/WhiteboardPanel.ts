@@ -1255,6 +1255,26 @@ export class WhiteboardPanel {
             font-size: 16px;
             font-weight: 600;
         }
+
+        /* Selection Box */
+        .selection-box {
+            position: absolute;
+            border: 2px dashed #22d3ee;
+            background: rgba(34, 211, 238, 0.1);
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        /* Selected state for blocks and cards */
+        .block.selected {
+            outline: 3px solid #22d3ee;
+            outline-offset: 2px;
+        }
+
+        .card.selected {
+            outline: 3px solid #22d3ee;
+            outline-offset: 2px;
+        }
     </style>
 </head>
 <body>
@@ -1365,6 +1385,16 @@ export class WhiteboardPanel {
         let panOffset = { x: 0, y: 0 };
         let pendingCardPosition = { x: 0, y: 0 };
 
+        // Multi-selection state
+        let selectedBlocks = new Set();
+        let selectedCards = new Set();
+        let isSelecting = false;
+        let selectionStart = { x: 0, y: 0 };
+        let selectionBox = null;
+        let isMultiDragging = false;
+        let multiDragStart = { x: 0, y: 0 };
+        let initialPositions = new Map();
+
         // Colors palette - 8 deep colors for white text visibility
         const colors = [
             '#2563eb', // 藍 Blue
@@ -1453,7 +1483,21 @@ export class WhiteboardPanel {
             div.addEventListener('mousedown', (e) => {
                 if (div.classList.contains('editing')) return; // Don't drag if editing
                 if (e.button !== 0) return; // Only Left Click
-                startDrag(e, div, block);
+                
+                // Check if this block is part of a multi-selection
+                if (isBlockSelected(block.id)) {
+                    // Start multi-drag if clicking on an already selected block
+                    e.stopPropagation();
+                    startMultiDrag(e);
+                } else if (e.shiftKey) {
+                    // Shift+click to add to selection
+                    e.stopPropagation();
+                    toggleBlockSelection(block.id, true);
+                } else {
+                    // Normal click - clear selection and start single drag
+                    clearSelection();
+                    startDrag(e, div, block);
+                }
             });
 
             // Context menu
@@ -1817,6 +1861,218 @@ export class WhiteboardPanel {
             document.getElementById('zoomLevel').textContent = Math.round(zoomLevel * 100) + '%';
         }
 
+        // Multi-selection functions
+        function clearSelection() {
+            selectedBlocks.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.remove('selected');
+            });
+            selectedCards.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.remove('selected');
+            });
+            selectedBlocks.clear();
+            selectedCards.clear();
+        }
+
+        function toggleBlockSelection(blockId, additive = false) {
+            if (!additive) {
+                clearSelection();
+            }
+            
+            if (selectedBlocks.has(blockId)) {
+                selectedBlocks.delete(blockId);
+                document.getElementById(blockId)?.classList.remove('selected');
+            } else {
+                selectedBlocks.add(blockId);
+                document.getElementById(blockId)?.classList.add('selected');
+            }
+        }
+
+        function toggleCardSelection(cardId, additive = false) {
+            if (!additive) {
+                clearSelection();
+            }
+            
+            if (selectedCards.has(cardId)) {
+                selectedCards.delete(cardId);
+                document.getElementById(cardId)?.classList.remove('selected');
+            } else {
+                selectedCards.add(cardId);
+                document.getElementById(cardId)?.classList.add('selected');
+            }
+        }
+
+        function startSelectionBox(e) {
+            const pos = screenToWhiteboard(e.clientX, e.clientY);
+            selectionStart = { x: pos.x, y: pos.y };
+            isSelecting = true;
+            
+            // Create selection box element
+            selectionBox = document.createElement('div');
+            selectionBox.className = 'selection-box';
+            selectionBox.style.left = pos.x + 'px';
+            selectionBox.style.top = pos.y + 'px';
+            selectionBox.style.width = '0px';
+            selectionBox.style.height = '0px';
+            whiteboard.appendChild(selectionBox);
+        }
+
+        function updateSelectionBox(e) {
+            if (!isSelecting || !selectionBox) return;
+            
+            const pos = screenToWhiteboard(e.clientX, e.clientY);
+            
+            const left = Math.min(selectionStart.x, pos.x);
+            const top = Math.min(selectionStart.y, pos.y);
+            const width = Math.abs(pos.x - selectionStart.x);
+            const height = Math.abs(pos.y - selectionStart.y);
+            
+            selectionBox.style.left = left + 'px';
+            selectionBox.style.top = top + 'px';
+            selectionBox.style.width = width + 'px';
+            selectionBox.style.height = height + 'px';
+        }
+
+        function endSelectionBox(e, additive = false) {
+            if (!isSelecting || !selectionBox) return;
+            
+            const pos = screenToWhiteboard(e.clientX, e.clientY);
+            
+            const selRect = {
+                left: Math.min(selectionStart.x, pos.x),
+                top: Math.min(selectionStart.y, pos.y),
+                right: Math.max(selectionStart.x, pos.x),
+                bottom: Math.max(selectionStart.y, pos.y)
+            };
+            
+            // Only clear if not additive (Shift not held)
+            if (!additive) {
+                clearSelection();
+            }
+            
+            // Check blocks for intersection
+            blocks.forEach(block => {
+                const blockRect = {
+                    left: block.x,
+                    top: block.y,
+                    right: block.x + 200, // block width
+                    bottom: block.y + 100 // block height
+                };
+                
+                if (rectsIntersect(selRect, blockRect)) {
+                    selectedBlocks.add(block.id);
+                    document.getElementById(block.id)?.classList.add('selected');
+                }
+            });
+            
+            // Check cards for intersection
+            cards.forEach(card => {
+                const cardRect = {
+                    left: card.x,
+                    top: card.y,
+                    right: card.x + (card.width || 300),
+                    bottom: card.y + (card.height || 200)
+                };
+                
+                if (rectsIntersect(selRect, cardRect)) {
+                    selectedCards.add(card.id);
+                    document.getElementById(card.id)?.classList.add('selected');
+                }
+            });
+            
+            // Remove selection box
+            selectionBox.remove();
+            selectionBox = null;
+            isSelecting = false;
+        }
+
+        function rectsIntersect(a, b) {
+            return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+        }
+
+        function startMultiDrag(e) {
+            if (selectedBlocks.size === 0 && selectedCards.size === 0) return;
+            
+            isMultiDragging = true;
+            multiDragStart = screenToWhiteboard(e.clientX, e.clientY);
+            
+            // Store initial positions
+            initialPositions.clear();
+            selectedBlocks.forEach(id => {
+                const block = blocks.find(b => b.id === id);
+                if (block) {
+                    initialPositions.set(id, { x: block.x, y: block.y });
+                }
+            });
+            selectedCards.forEach(id => {
+                const card = cards.find(c => c.id === id);
+                if (card) {
+                    initialPositions.set(id, { x: card.x, y: card.y });
+                }
+            });
+            
+            document.addEventListener('mousemove', onMultiDrag);
+            document.addEventListener('mouseup', stopMultiDrag);
+        }
+
+        function onMultiDrag(e) {
+            if (!isMultiDragging) return;
+            e.preventDefault();
+            
+            const currentPos = screenToWhiteboard(e.clientX, e.clientY);
+            const deltaX = currentPos.x - multiDragStart.x;
+            const deltaY = currentPos.y - multiDragStart.y;
+            
+            // Move all selected blocks
+            selectedBlocks.forEach(id => {
+                const block = blocks.find(b => b.id === id);
+                const initial = initialPositions.get(id);
+                if (block && initial) {
+                    block.x = initial.x + deltaX;
+                    block.y = initial.y + deltaY;
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.style.left = block.x + 'px';
+                        el.style.top = block.y + 'px';
+                    }
+                }
+            });
+            
+            // Move all selected cards
+            selectedCards.forEach(id => {
+                const card = cards.find(c => c.id === id);
+                const initial = initialPositions.get(id);
+                if (card && initial) {
+                    card.x = initial.x + deltaX;
+                    card.y = initial.y + deltaY;
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.style.left = card.x + 'px';
+                        el.style.top = card.y + 'px';
+                    }
+                }
+            });
+        }
+
+        function stopMultiDrag() {
+            if (isMultiDragging) {
+                isMultiDragging = false;
+                initialPositions.clear();
+                saveState();
+            }
+            document.removeEventListener('mousemove', onMultiDrag);
+            document.removeEventListener('mouseup', stopMultiDrag);
+        }
+
+        function isBlockSelected(blockId) {
+            return selectedBlocks.has(blockId);
+        }
+
+        function isCardSelected(cardId) {
+            return selectedCards.has(cardId);
+        }
+
         function saveState() {
             vscode.postMessage({ command: 'saveState', state: { blocks, cards } });
         }
@@ -1965,7 +2221,21 @@ export class WhiteboardPanel {
             header.addEventListener('mousedown', (e) => {
                 if (e.target === collapseToggle || collapseToggle.contains(e.target)) return;
                 if (e.button !== 0) return;
-                startCardDrag(e, div, card);
+                
+                // Check if this card is part of a multi-selection
+                if (isCardSelected(card.id)) {
+                    // Start multi-drag if clicking on an already selected card
+                    e.stopPropagation();
+                    startMultiDrag(e);
+                } else if (e.shiftKey) {
+                    // Shift+click to add to selection
+                    e.stopPropagation();
+                    toggleCardSelection(card.id, true);
+                } else {
+                    // Normal click - clear selection and start single drag
+                    clearSelection();
+                    startCardDrag(e, div, card);
+                }
             });
 
             // Resize
@@ -2357,6 +2627,17 @@ export class WhiteboardPanel {
                 panStart = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
                 canvasContainer.style.cursor = 'grabbing';
                 e.preventDefault();
+                return;
+            }
+            
+            // Left click on empty canvas area - start selection box
+            if (e.button === 0 && (e.target === whiteboard || e.target === canvasContainer)) {
+                // Clear selection if not holding Shift
+                if (!e.shiftKey) {
+                    clearSelection();
+                }
+                startSelectionBox(e);
+                e.preventDefault();
             }
         });
 
@@ -2366,12 +2647,22 @@ export class WhiteboardPanel {
                 panOffset.y = e.clientY - panStart.y;
                 updateWhiteboardTransform();
             }
+            
+            // Update selection box if selecting
+            if (isSelecting) {
+                updateSelectionBox(e);
+            }
         });
 
         document.addEventListener('mouseup', (e) => {
             if (isPanning) {
                 isPanning = false;
                 canvasContainer.style.cursor = 'grab';
+            }
+            
+            // End selection box if selecting
+            if (isSelecting) {
+                endSelectionBox(e, e.shiftKey);
             }
         });
 

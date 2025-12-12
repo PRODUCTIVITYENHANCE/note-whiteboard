@@ -2,7 +2,7 @@
     "name": "whiteboard-canvas",
     "displayName": "Whiteboard Canvas",
     "description": "A whiteboard canvas for visualizing and managing markdown files",
-    "version": "1.2.5",
+    "version": "1.2.6",
     "publisher": "your-publisher-name",
     "repository": {
         "type": "git",
