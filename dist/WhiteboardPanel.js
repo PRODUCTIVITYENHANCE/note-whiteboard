@@ -92,7 +92,7 @@ class WhiteboardPanel {
                     await this._saveCardContent(message.filePath, message.content);
                     break;
                 case 'createNewCard':
-                    await this._createNewCard(message.fileName, message.x, message.y);
+                    await this._createNewCard(message.fileName, message.x, message.y, message.forBlockId);
                     break;
                 case 'getCardFolderPath':
                     const folderPath = this._getCardFolderPath();
@@ -293,7 +293,7 @@ class WhiteboardPanel {
         const config = vscode.workspace.getConfiguration('whiteboard');
         return config.get('cardFolderPath', '');
     }
-    async _createNewCard(fileName, x, y) {
+    async _createNewCard(fileName, x, y, forBlockId) {
         try {
             const workspaceFolders = vscode.workspace.workspaceFolders;
             if (!workspaceFolders) {
@@ -335,7 +335,8 @@ class WhiteboardPanel {
                 command: 'cardCreated',
                 filePath: relativePath,
                 x: x,
-                y: y
+                y: y,
+                forBlockId: forBlockId
             });
         }
         catch (error) {
@@ -706,11 +707,62 @@ class WhiteboardPanel {
             opacity: 0.7;
         }
 
-        .file-item:hover {
+        .file-item:hover, .file-item.selected {
             background: #2a2a2a;
             border-color: #555;
             color: #fff;
             transform: translateX(4px);
+        }
+
+        .file-search-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #0a0a0a;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            margin-bottom: 12px;
+        }
+
+        .file-search-input:focus {
+            border-color: #667eea;
+        }
+
+        .file-list-container {
+            display: flex;
+            flex-direction: column;
+            max-height: 400px;
+        }
+
+        .new-file-item {
+            padding: 14px;
+            background: #1a1a2e;
+            border: 1px dashed #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #667eea;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+            flex-shrink: 0;
+        }
+
+        .new-file-item:hover, .new-file-item.selected {
+            background: #252540;
+            border-color: #8b9ff5;
+            color: #8b9ff5;
+        }
+
+        .no-results {
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
         }
 
         .modal-actions {
@@ -1025,7 +1077,14 @@ class WhiteboardPanel {
     <div class="modal-overlay" id="fileModal">
         <div class="modal">
             <h3>📁 Select Markdown File</h3>
-            <div class="file-list" id="fileList"></div>
+            <input type="text" class="file-search-input" id="fileSearchInput" placeholder="搜尋檔案名稱...">
+            <div class="file-list-container">
+                <div class="file-list" id="fileList"></div>
+                <div class="new-file-item" id="newFileItem">
+                    <span>➕</span>
+                    <span>建立新檔案...</span>
+                </div>
+            </div>
             <div class="modal-actions">
                 <button class="modal-btn" id="browseFileBtn">Browse System...</button>
                 <button class="modal-btn" id="closeModalBtn" style="background: transparent; border: 1px solid #333;">Cancel</button>
@@ -1307,17 +1366,114 @@ class WhiteboardPanel {
             hideContextMenu();
         }
 
+        // File selector state
+        let allWorkspaceFiles = [];
+        let selectedFileIndex = -1;
+        let filteredFiles = [];
+        const fileSearchInput = document.getElementById('fileSearchInput');
+        const newFileItem = document.getElementById('newFileItem');
+
         function openFileSelector(blockId) {
             selectedBlockId = blockId || contextBlockId;
+            selectedFileIndex = -1;
+            fileSearchInput.value = '';
             vscode.postMessage({ command: 'getWorkspaceFiles' });
             fileModal.classList.add('active');
+            setTimeout(() => fileSearchInput.focus(), 100);
             hideContextMenu();
         }
 
         function closeFileSelector() {
             fileModal.classList.remove('active');
             selectedBlockId = null;
+            selectedFileIndex = -1;
         }
+
+        function renderFileList(files) {
+            filteredFiles = files;
+            if (files.length === 0) {
+                fileList.innerHTML = '<div class="no-results">找不到符合的檔案</div>';
+            } else {
+                fileList.innerHTML = files.map((f, i) => 
+                    \`<div class="file-item\${i === selectedFileIndex ? ' selected' : ''}" data-file="\${f}" data-index="\${i}">\${f}</div>\`
+                ).join('');
+                fileList.querySelectorAll('.file-item').forEach(item => {
+                    item.addEventListener('click', () => selectFile(item.dataset.file));
+                });
+            }
+            updateNewFileItemSelection();
+        }
+
+        function updateNewFileItemSelection() {
+            // New File item is selected when selectedFileIndex equals filteredFiles.length
+            if (selectedFileIndex === filteredFiles.length) {
+                newFileItem.classList.add('selected');
+            } else {
+                newFileItem.classList.remove('selected');
+            }
+        }
+
+        function updateSelectedItem() {
+            fileList.querySelectorAll('.file-item').forEach((item, i) => {
+                if (i === selectedFileIndex) {
+                    item.classList.add('selected');
+                    item.scrollIntoView({ block: 'nearest' });
+                } else {
+                    item.classList.remove('selected');
+                }
+            });
+            updateNewFileItemSelection();
+        }
+
+        function filterFiles(query) {
+            selectedFileIndex = -1;
+            const q = query.toLowerCase();
+            const filtered = allWorkspaceFiles.filter(f => f.toLowerCase().includes(q));
+            renderFileList(filtered);
+        }
+
+        // File search input events
+        fileSearchInput.addEventListener('input', (e) => {
+            filterFiles(e.target.value);
+        });
+
+        fileSearchInput.addEventListener('keydown', (e) => {
+            const totalItems = filteredFiles.length + 1; // +1 for New File item
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                selectedFileIndex = Math.min(selectedFileIndex + 1, totalItems - 1);
+                updateSelectedItem();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                selectedFileIndex = Math.max(selectedFileIndex - 1, -1);
+                updateSelectedItem();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (selectedFileIndex >= 0 && selectedFileIndex < filteredFiles.length) {
+                    selectFile(filteredFiles[selectedFileIndex]);
+                } else if (selectedFileIndex === filteredFiles.length) {
+                    // New File selected
+                    openNewFileForBlock();
+                }
+            } else if (e.key === 'Escape') {
+                closeFileSelector();
+            }
+        });
+
+        // New File item click
+        newFileItem.addEventListener('click', openNewFileForBlock);
+
+        function openNewFileForBlock() {
+            closeFileSelector();
+            // Open new file modal with callback to link to block
+            newFileForBlockMode = true;
+            newCardModal.classList.add('active');
+            document.getElementById('newCardFileName').value = '';
+            document.getElementById('newCardFileName').focus();
+        }
+
+        let newFileForBlockMode = false;
 
         function selectFile(filePath) {
             if (!selectedBlockId) return;
@@ -1624,17 +1780,31 @@ class WhiteboardPanel {
 
         function closeNewCardModal() {
             newCardModal.classList.remove('active');
+            newFileForBlockMode = false;
         }
 
         function createNewCard() {
             const fileName = document.getElementById('newCardFileName').value.trim();
             if (!fileName) return;
-            vscode.postMessage({ 
-                command: 'createNewCard', 
-                fileName: fileName,
-                x: pendingCardPosition.x - 150,
-                y: pendingCardPosition.y - 100
-            });
+            
+            if (newFileForBlockMode && selectedBlockId) {
+                // Creating new file for block linking
+                vscode.postMessage({ 
+                    command: 'createNewCard', 
+                    fileName: fileName,
+                    x: 0,
+                    y: 0,
+                    forBlockId: selectedBlockId
+                });
+            } else {
+                // Creating new card on canvas
+                vscode.postMessage({ 
+                    command: 'createNewCard', 
+                    fileName: fileName,
+                    x: pendingCardPosition.x - 150,
+                    y: pendingCardPosition.y - 100
+                });
+            }
             closeNewCardModal();
         }
 
@@ -1646,12 +1816,8 @@ class WhiteboardPanel {
                     loadState(message.state);
                     break;
                 case 'workspaceFiles':
-                    fileList.innerHTML = message.files.map(f => 
-                        \`<div class="file-item" data-file="\${f}">\${f}</div>\`
-                    ).join('');
-                    fileList.querySelectorAll('.file-item').forEach(item => {
-                        item.addEventListener('click', () => selectFile(item.dataset.file));
-                    });
+                    allWorkspaceFiles = message.files;
+                    renderFileList(message.files);
                     break;
                 case 'fileSelected':
                     if (message.blockId) {
@@ -1728,7 +1894,18 @@ class WhiteboardPanel {
                     }
                     break;
                 case 'cardCreated':
-                    addCard(message.filePath, message.x, message.y);
+                    if (message.forBlockId) {
+                        // Link to block instead of creating card
+                        const block = blocks.find(b => b.id === message.forBlockId);
+                        if (block) {
+                            block.linkedFile = message.filePath;
+                            const element = document.getElementById(message.forBlockId);
+                            if (element) element.classList.add('linked');
+                            saveState();
+                        }
+                    } else {
+                        addCard(message.filePath, message.x, message.y);
+                    }
                     break;
             }
         });
