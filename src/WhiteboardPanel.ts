@@ -2765,6 +2765,23 @@ export class WhiteboardPanel {
 
         // Smooth Mouse wheel zoom and trackpad pan
         canvasContainer.addEventListener('wheel', (e) => {
+            // If the active element is a textarea (editing card), let it scroll naturally
+            const activeElement = document.activeElement;
+            if (activeElement && activeElement.tagName === 'TEXTAREA') {
+                const textarea = activeElement;
+                // Check if the textarea can scroll (has overflow)
+                const canScrollUp = textarea.scrollTop > 0;
+                const canScrollDown = textarea.scrollTop < (textarea.scrollHeight - textarea.clientHeight);
+                
+                // If scrolling down and can scroll down, or scrolling up and can scroll up
+                // Let the native scroll happen
+                if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
+                    // Don't prevent default - allow textarea to scroll
+                    e.stopPropagation();
+                    return;
+                }
+            }
+            
             e.preventDefault();
             
             if (e.ctrlKey || e.metaKey) {
