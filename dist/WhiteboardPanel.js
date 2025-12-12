@@ -69,7 +69,7 @@ class WhiteboardPanel {
         this._panel.webview.onDidReceiveMessage(async (message) => {
             switch (message.command) {
                 case 'openFile':
-                    await this._openFile(message.filePath);
+                    await this._openFile(message.filePath, message.splitView);
                     break;
                 case 'saveState':
                     await this._saveState(message.state);
@@ -187,7 +187,7 @@ class WhiteboardPanel {
             // File might not exist or other error, just ignore
         }
     }
-    async _openFile(filePath) {
+    async _openFile(filePath, splitView = true) {
         try {
             const workspaceFolders = vscode.workspace.workspaceFolders;
             if (!workspaceFolders) {
@@ -204,7 +204,8 @@ class WhiteboardPanel {
             const uri = vscode.Uri.file(fullPath);
             if (fs.existsSync(fullPath)) {
                 const doc = await vscode.workspace.openTextDocument(uri);
-                await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+                const viewColumn = splitView ? vscode.ViewColumn.Beside : vscode.ViewColumn.One;
+                await vscode.window.showTextDocument(doc, viewColumn);
             }
             else {
                 vscode.window.showErrorMessage(`File not found: ${filePath}`);
@@ -1229,6 +1230,7 @@ class WhiteboardPanel {
             });
 
             // Click to open linked file (only if not editing and not recently dragged)
+            // Normal click: open in main view, Option+click: open in split view
             div.addEventListener('click', (e) => {
                 if (div.classList.contains('editing')) return;
                 
@@ -1237,7 +1239,9 @@ class WhiteboardPanel {
 
                 if (block.linkedFile) {
                     e.preventDefault();
-                    vscode.postMessage({ command: 'openFile', filePath: block.linkedFile });
+                    e.stopPropagation();
+                    const splitView = e.altKey;
+                    vscode.postMessage({ command: 'openFile', filePath: block.linkedFile, splitView: splitView });
                 }
             });
 
@@ -1646,17 +1650,35 @@ class WhiteboardPanel {
             collapseToggle.title = card.collapsed ? 'Expand' : 'Collapse';
             header.appendChild(collapseToggle);
             
-            // File icon
+            // File icon - also clickable
             const fileIcon = document.createElement('i');
             fileIcon.setAttribute('data-lucide', 'file-text');
             fileIcon.className = 'icon-sm';
+            fileIcon.style.cursor = 'pointer';
+            fileIcon.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const splitView = e.altKey;
+                vscode.postMessage({ command: 'openFile', filePath: card.filePath, splitView: splitView });
+            });
             header.appendChild(fileIcon);
             
-            // Filename
+            // Filename - clickable to open file
             const displayName = getFileName(card.filePath);
             const filenameSpan = document.createElement('span');
             filenameSpan.className = 'filename';
             filenameSpan.textContent = displayName;
+            filenameSpan.style.cursor = 'pointer';
+            filenameSpan.title = 'Click to open, Option+click for split view';
+            
+            // Click on filename to open file
+            filenameSpan.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const splitView = e.altKey;
+                vscode.postMessage({ command: 'openFile', filePath: card.filePath, splitView: splitView });
+            });
+            
             header.appendChild(filenameSpan);
             
             div.appendChild(header);
