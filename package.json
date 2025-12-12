@@ -1,0 +1,53 @@
+{
+    "name": "whiteboard-canvas",
+    "displayName": "Whiteboard Canvas",
+    "description": "A simple whiteboard with draggable blocks that can link to markdown files",
+    "version": "2.0.0",
+    "publisher": "your-publisher-name",
+    "engines": {
+        "vscode": "^1.74.0"
+    },
+    "categories": [
+        "Visualization",
+        "Other"
+    ],
+    "keywords": [
+        "whiteboard",
+        "canvas",
+        "markdown",
+        "notes",
+        "blocks"
+    ],
+    "icon": "media/icon.png",
+    "activationEvents": [],
+    "main": "./dist/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "whiteboard.open",
+                "title": "Open Whiteboard",
+                "category": "Whiteboard"
+            }
+        ],
+        "menus": {
+            "commandPalette": [
+                {
+                    "command": "whiteboard.open",
+                    "when": "true"
+                }
+            ]
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "package": "vsce package"
+    },
+    "devDependencies": {
+        "@types/node": "^18.0.0",
+        "@types/vscode": "^1.74.0",
+        "typescript": "^5.0.0",
+        "@vscode/vsce": "^2.22.0"
+    }
+}
