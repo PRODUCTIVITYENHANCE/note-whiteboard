@@ -9,6 +9,7 @@ export declare class WhiteboardPanel {
     static createOrShow(context: vscode.ExtensionContext): void;
     private constructor();
     private _setupFileWatcher;
+    private _notifyFileDeleted;
     private _notifyFileChanged;
     private _openFile;
     private _browseFile;

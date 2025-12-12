@@ -108,6 +108,10 @@ class WhiteboardPanel {
         this._fileWatcher.onDidChange(async (uri) => {
             await this._notifyFileChanged(uri);
         });
+        // When a .md file is deleted
+        this._fileWatcher.onDidDelete(async (uri) => {
+            await this._notifyFileDeleted(uri);
+        });
         this._disposables.push(this._fileWatcher);
         // Also listen for document save events (more reliable for editor changes)
         vscode.workspace.onDidSaveTextDocument(async (document) => {
@@ -115,6 +119,37 @@ class WhiteboardPanel {
                 await this._notifyFileChanged(document.uri);
             }
         }, null, this._disposables);
+    }
+    async _notifyFileDeleted(uri) {
+        try {
+            const state = this._loadState();
+            const filePath = uri.fsPath;
+            // Check if any card is using this file
+            const matchingCards = state.cards.filter((card) => {
+                if (path.isAbsolute(card.filePath)) {
+                    return card.filePath === filePath;
+                }
+                else {
+                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                    if (workspaceFolders) {
+                        const fullCardPath = path.join(workspaceFolders[0].uri.fsPath, card.filePath);
+                        return fullCardPath === filePath;
+                    }
+                }
+                return false;
+            });
+            // Notify webview about deleted file
+            for (const card of matchingCards) {
+                this._panel.webview.postMessage({
+                    command: 'fileDeleted',
+                    cardId: card.id,
+                    filePath: card.filePath
+                });
+            }
+        }
+        catch (error) {
+            // Ignore errors
+        }
     }
     async _notifyFileChanged(uri) {
         try {
@@ -801,6 +836,104 @@ class WhiteboardPanel {
             border-radius: 0 0 12px 0;
         }
 
+        /* Collapse toggle button */
+        .card-collapse-toggle {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .card-collapse-toggle::before {
+            content: '';
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 6px solid #888;
+            transition: transform 0.2s ease;
+        }
+
+        .card-collapse-toggle:hover::before {
+            border-top-color: #fff;
+        }
+
+        /* Collapsed state */
+        .card.collapsed .card-collapse-toggle::before {
+            transform: rotate(-90deg);
+        }
+
+        .card.collapsed .card-content {
+            display: none;
+        }
+
+        .card.collapsed .card-resize-handle {
+            display: none;
+        }
+
+        .card.collapsed {
+            height: auto !important;
+            min-height: auto;
+        }
+
+        .card.collapsed .card-header {
+            border-bottom: none;
+            border-radius: 12px;
+        }
+
+        /* Disconnected card state */
+        .card.disconnected .card-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .card.disconnected .card-textarea {
+            display: none;
+        }
+
+        .disconnected-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+            height: 100%;
+        }
+
+        .disconnected-message {
+            color: #888;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .refresh-btn {
+            padding: 8px 16px;
+            background: #333;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #ccc;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .refresh-btn:hover {
+            background: #444;
+            color: #fff;
+            border-color: #555;
+        }
+
         /* Canvas Context Menu */
         .canvas-context-menu {
             position: fixed;
@@ -1236,28 +1369,71 @@ class WhiteboardPanel {
 
         function createCardElement(card) {
             const div = document.createElement('div');
-            div.className = 'card';
+            div.className = 'card' + (card.collapsed ? ' collapsed' : '');
             div.id = card.id;
             div.style.left = card.x + 'px';
             div.style.top = card.y + 'px';
             div.style.width = (card.width || 300) + 'px';
-            div.style.height = (card.height || 200) + 'px';
+            if (!card.collapsed) {
+                div.style.height = (card.height || 200) + 'px';
+            }
 
             // Header - only show filename, not full path
             const header = document.createElement('div');
             header.className = 'card-header';
+            
+            // Collapse toggle triangle
+            const collapseToggle = document.createElement('div');
+            collapseToggle.className = 'card-collapse-toggle';
+            collapseToggle.title = card.collapsed ? 'Expand' : 'Collapse';
+            header.appendChild(collapseToggle);
+            
+            // File icon
+            const fileIcon = document.createElement('span');
+            fileIcon.textContent = '📄';
+            header.appendChild(fileIcon);
+            
+            // Filename
             const displayName = getFileName(card.filePath);
-            header.innerHTML = \`<span>📄</span><span class="filename">\${displayName}</span>\`;
+            const filenameSpan = document.createElement('span');
+            filenameSpan.className = 'filename';
+            filenameSpan.textContent = displayName;
+            header.appendChild(filenameSpan);
+            
             div.appendChild(header);
 
             // Content
             const content = document.createElement('div');
             content.className = 'card-content';
+            
+            // Textarea for editing
             const textarea = document.createElement('textarea');
             textarea.className = 'card-textarea';
             textarea.placeholder = 'Loading...';
             textarea.dataset.cardId = card.id;
             content.appendChild(textarea);
+            
+            // Disconnected message container (hidden by default)
+            const disconnectedContainer = document.createElement('div');
+            disconnectedContainer.className = 'disconnected-container';
+            disconnectedContainer.style.display = 'none';
+            
+            const disconnectedMsg = document.createElement('div');
+            disconnectedMsg.className = 'disconnected-message';
+            disconnectedMsg.textContent = '此文件已斷開連結';
+            disconnectedContainer.appendChild(disconnectedMsg);
+            
+            const refreshBtn = document.createElement('button');
+            refreshBtn.className = 'refresh-btn';
+            refreshBtn.innerHTML = '↻ 重新連結';
+            refreshBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // Try to reload the file content
+                vscode.postMessage({ command: 'readCardContent', cardId: card.id, filePath: card.filePath });
+            });
+            disconnectedContainer.appendChild(refreshBtn);
+            
+            content.appendChild(disconnectedContainer);
             div.appendChild(content);
 
             // Resize handle
@@ -1265,8 +1441,26 @@ class WhiteboardPanel {
             resizeHandle.className = 'card-resize-handle';
             div.appendChild(resizeHandle);
 
-            // Drag by header
+            // Collapse toggle click handler
+            collapseToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                card.collapsed = !card.collapsed;
+                div.classList.toggle('collapsed');
+                collapseToggle.title = card.collapsed ? 'Expand' : 'Collapse';
+                
+                if (!card.collapsed) {
+                    // Restore height when expanding
+                    div.style.height = (card.height || 200) + 'px';
+                } else {
+                    // Remove explicit height when collapsing
+                    div.style.height = '';
+                }
+                saveState();
+            });
+
+            // Drag by header (but not by clicking on toggle)
             header.addEventListener('mousedown', (e) => {
+                if (e.target === collapseToggle || collapseToggle.contains(e.target)) return;
                 if (e.button !== 0) return;
                 startCardDrag(e, div, card);
             });
@@ -1471,18 +1665,20 @@ class WhiteboardPanel {
                     }
                     closeFileSelector();
                     break;
-                case 'cardContent':
-                    const cardTextarea = document.querySelector(\`textarea[data-card-id="\${message.cardId}"]\`);
-                    if (cardTextarea) {
-                        cardTextarea.value = message.content;
-                        cardTextarea.placeholder = 'Type here...';
-                    }
-                    break;
                 case 'fileChanged':
                     // File was changed externally (e.g., in VS Code editor)
                     // Update the card content if it's not currently being edited
-                    const changedTextarea = document.querySelector(\`textarea[data-card-id="\${message.cardId}"]\`);
+                    const changedTextarea = document.querySelector(\`textarea[data-card-id=\"\${message.cardId}\"]\`);
                     if (changedTextarea) {
+                        // If card was disconnected, reconnect it
+                        const changedCard = changedTextarea.closest('.card');
+                        if (changedCard && changedCard.classList.contains('disconnected')) {
+                            changedCard.classList.remove('disconnected');
+                            const disconnectedContainer = changedCard.querySelector('.disconnected-container');
+                            if (disconnectedContainer) disconnectedContainer.style.display = 'none';
+                            changedTextarea.style.display = '';
+                        }
+                        
                         // Only update if the textarea is not focused (user not actively editing)
                         if (document.activeElement !== changedTextarea) {
                             changedTextarea.value = message.content;
@@ -1500,6 +1696,35 @@ class WhiteboardPanel {
                                 }, { once: true });
                             }
                         }
+                    }
+                    break;
+                case 'fileDeleted':
+                    // File was deleted - show disconnected state
+                    const deletedCardTextarea = document.querySelector(\`textarea[data-card-id="\${message.cardId}"]\`);
+                    if (deletedCardTextarea) {
+                        const deletedCard = deletedCardTextarea.closest('.card');
+                        if (deletedCard && !deletedCard.classList.contains('disconnected')) {
+                            deletedCard.classList.add('disconnected');
+                            // Show disconnected message, hide textarea
+                            deletedCardTextarea.style.display = 'none';
+                            const disconnectedContainer = deletedCard.querySelector('.disconnected-container');
+                            if (disconnectedContainer) disconnectedContainer.style.display = 'flex';
+                        }
+                    }
+                    break;
+                case 'cardContent':
+                    const cardTextarea = document.querySelector(\`textarea[data-card-id="\${message.cardId}"]\`);
+                    if (cardTextarea) {
+                        // File exists - remove disconnected state if present
+                        const cardEl = cardTextarea.closest('.card');
+                        if (cardEl && cardEl.classList.contains('disconnected')) {
+                            cardEl.classList.remove('disconnected');
+                            const disconnectedContainer = cardEl.querySelector('.disconnected-container');
+                            if (disconnectedContainer) disconnectedContainer.style.display = 'none';
+                            cardTextarea.style.display = '';
+                        }
+                        cardTextarea.value = message.content;
+                        cardTextarea.placeholder = 'Type here...';
                     }
                     break;
                 case 'cardCreated':
