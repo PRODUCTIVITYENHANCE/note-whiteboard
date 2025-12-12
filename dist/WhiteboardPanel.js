@@ -359,11 +359,28 @@ class WhiteboardPanel {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Whiteboard</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+        }
+
+        .icon {
+            width: 18px;
+            height: 18px;
+            stroke-width: 2;
+        }
+
+        .icon-sm {
+            width: 14px;
+            height: 14px;
+        }
+
+        .icon-lg {
+            width: 20px;
+            height: 20px;
         }
 
         body {
@@ -702,9 +719,10 @@ class WhiteboardPanel {
         }
 
         .file-item::before {
-            content: '📄';
-            font-size: 16px;
-            opacity: 0.7;
+            content: '';
+            width: 16px;
+            height: 16px;
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/%3E%3Cpolyline points='14 2 14 8 20 8'/%3E%3C/svg%3E") no-repeat center;
         }
 
         .file-item:hover, .file-item.selected {
@@ -1036,15 +1054,15 @@ class WhiteboardPanel {
 </head>
 <body>
     <div id="toolbar">
-        <button class="toolbar-btn" id="addBlock" title="Add Block (or double-click canvas)">➕</button>
-        <button class="toolbar-btn" id="saveBtn" title="Save">💾</button>
+        <button class="toolbar-btn" id="addBlock" title="Add Block (or double-click canvas)"><i data-lucide="plus" class="icon"></i></button>
+        <button class="toolbar-btn" id="saveBtn" title="Save"><i data-lucide="save" class="icon"></i></button>
     </div>
 
     <div id="zoom-controls">
-        <button class="zoom-btn" id="zoomOut">−</button>
+        <button class="zoom-btn" id="zoomOut"><i data-lucide="minus" class="icon"></i></button>
         <div class="zoom-level" id="zoomLevel">100%</div>
-        <button class="zoom-btn" id="zoomIn">+</button>
-        <button class="zoom-btn" id="resetZoom" title="Reset Zoom">↺</button>
+        <button class="zoom-btn" id="zoomIn"><i data-lucide="plus" class="icon"></i></button>
+        <button class="zoom-btn" id="resetZoom" title="Reset Zoom"><i data-lucide="rotate-ccw" class="icon"></i></button>
     </div>
 
     <div id="canvas-container">
@@ -1058,17 +1076,17 @@ class WhiteboardPanel {
         </div>
         <div class="context-menu-section">
             <div class="context-menu-item" id="linkFileMenu">
-                <span>🔗</span>
+                <i data-lucide="link" class="icon"></i>
                 <span>Link to .md file</span>
             </div>
             <div class="context-menu-item" id="unlinkFileMenu" style="display: none;">
-                <span>🔓</span>
+                <i data-lucide="unlink" class="icon"></i>
                 <span>Unlink file</span>
             </div>
         </div>
         <div class="context-menu-section">
             <div class="context-menu-item danger" id="deleteBlockMenu">
-                <span>🗑️</span>
+                <i data-lucide="trash-2" class="icon"></i>
                 <span>Delete</span>
             </div>
         </div>
@@ -1076,12 +1094,12 @@ class WhiteboardPanel {
 
     <div class="modal-overlay" id="fileModal">
         <div class="modal">
-            <h3>📁 Select Markdown File</h3>
+            <h3><i data-lucide="folder-open" class="icon"></i> Select Markdown File</h3>
             <input type="text" class="file-search-input" id="fileSearchInput" placeholder="搜尋檔案名稱...">
             <div class="file-list-container">
                 <div class="file-list" id="fileList"></div>
                 <div class="new-file-item" id="newFileItem">
-                    <span>➕</span>
+                    <i data-lucide="file-plus" class="icon"></i>
                     <span>建立新檔案...</span>
                 </div>
             </div>
@@ -1095,11 +1113,11 @@ class WhiteboardPanel {
     <!-- Canvas Context Menu -->
     <div class="canvas-context-menu" id="canvasContextMenu">
         <div class="context-menu-item" id="addBlockFromMenu">
-            <span>🟦</span>
+            <i data-lucide="square" class="icon"></i>
             <span>Add Block</span>
         </div>
         <div class="context-menu-item" id="addCardFromMenu">
-            <span>📄</span>
+            <i data-lucide="file-text" class="icon"></i>
             <span>Add Card (.md)</span>
         </div>
     </div>
@@ -1107,7 +1125,7 @@ class WhiteboardPanel {
     <!-- New Card Modal -->
     <div class="modal-overlay" id="newCardModal">
         <div class="modal">
-            <h3>📝 Create New Card</h3>
+            <h3><i data-lucide="file-plus" class="icon"></i> Create New Card</h3>
             <input type="text" class="modal-input" id="newCardFileName" placeholder="Enter filename (e.g. my-notes)">
             <div class="modal-actions">
                 <button class="modal-btn" id="createCardBtn">Create</button>
@@ -1118,7 +1136,7 @@ class WhiteboardPanel {
 
     <!-- Drop Indicator -->
     <div class="drop-indicator" id="dropIndicator">
-        <span>📄 Drop .md file to create card</span>
+        <span><i data-lucide="file-down" class="icon-lg"></i> Drop .md file to create card</span>
     </div>
 
     <script>
@@ -1545,8 +1563,9 @@ class WhiteboardPanel {
             header.appendChild(collapseToggle);
             
             // File icon
-            const fileIcon = document.createElement('span');
-            fileIcon.textContent = '📄';
+            const fileIcon = document.createElement('i');
+            fileIcon.setAttribute('data-lucide', 'file-text');
+            fileIcon.className = 'icon-sm';
             header.appendChild(fileIcon);
             
             // Filename
@@ -1581,7 +1600,7 @@ class WhiteboardPanel {
             
             const refreshBtn = document.createElement('button');
             refreshBtn.className = 'refresh-btn';
-            refreshBtn.innerHTML = '↻ 重新連結';
+            refreshBtn.innerHTML = '<i data-lucide="refresh-cw" class="icon-sm"></i> 重新連結';
             refreshBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 // Try to reload the file content
@@ -2042,6 +2061,15 @@ class WhiteboardPanel {
 
         // Load initial state
         vscode.postMessage({ command: 'requestState' });
+
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Watch for new icons added dynamically
+        const iconObserver = new MutationObserver(() => {
+            lucide.createIcons();
+        });
+        iconObserver.observe(document.body, { childList: true, subtree: true });
     </script>
 </body>
 </html>`;
