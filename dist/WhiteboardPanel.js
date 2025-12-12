@@ -536,6 +536,8 @@ class WhiteboardPanel {
             text-decoration: underline;
             text-decoration-thickness: 2px;
             text-underline-offset: 4px;
+            pointer-events: auto;
+            cursor: pointer;
         }
 
         .block-input {
@@ -1229,12 +1231,12 @@ class WhiteboardPanel {
                 setTimeout(() => textarea.focus(), 0);
             });
 
-            // Click to open linked file (only if not editing and not recently dragged)
+            // Click on text content to open linked file (only text area, not surrounding space)
             // Normal click: open in main view, Option+click: open in split view
-            div.addEventListener('click', (e) => {
+            contentDiv.addEventListener('click', (e) => {
                 if (div.classList.contains('editing')) return;
                 
-                // If it was a drag release, consume event
+                // If it was a drag release, don't open file
                 if (draggedBlock) return;
 
                 if (block.linkedFile) {
