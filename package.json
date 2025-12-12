@@ -1,9 +1,13 @@
 {
     "name": "whiteboard-canvas",
     "displayName": "Whiteboard Canvas",
-    "description": "A simple whiteboard with draggable blocks that can link to markdown files",
-    "version": "1.1.0",
+    "description": "A whiteboard canvas for visualizing and managing markdown files",
+    "version": "1.2.2",
     "publisher": "your-publisher-name",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/your-username/whiteboard-canvas.git"
+    },
     "engines": {
         "vscode": "^1.74.0"
     },
