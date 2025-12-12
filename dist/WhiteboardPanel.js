@@ -1161,6 +1161,7 @@ class WhiteboardPanel {
         let resizingCard = null;
         let dragOffset = { x: 0, y: 0 };
         let zoomLevel = 1;
+        let panOffset = { x: 0, y: 0 };
         let pendingCardPosition = { x: 0, y: 0 };
 
         // Colors palette
@@ -1274,8 +1275,9 @@ class WhiteboardPanel {
             if (!draggedBlock) return;
             e.preventDefault(); // Prevent text selection
 
-            const x = (e.clientX + canvasContainer.scrollLeft) / zoomLevel - dragOffset.x;
-            const y = (e.clientY + canvasContainer.scrollTop) / zoomLevel - dragOffset.y;
+            const pos = screenToWhiteboard(e.clientX, e.clientY);
+            const x = pos.x - dragOffset.x;
+            const y = pos.y - dragOffset.y;
 
             draggedBlock.element.style.left = x + 'px';
             draggedBlock.element.style.top = y + 'px';
@@ -1295,9 +1297,10 @@ class WhiteboardPanel {
         }
 
         function addBlock(x, y) {
-            // Default center if no coords
-            const startX = x || (canvasContainer.scrollLeft + canvasContainer.clientWidth/2) / zoomLevel - 100;
-            const startY = y || (canvasContainer.scrollTop + canvasContainer.clientHeight/2) / zoomLevel - 50;
+            // Default center if no coords - use whiteboard center
+            const centerPos = screenToWhiteboard(canvasContainer.clientWidth / 2, canvasContainer.clientHeight / 2);
+            const startX = x !== undefined ? x : centerPos.x - 100;
+            const startY = y !== undefined ? y : centerPos.y - 50;
 
             const block = {
                 id: generateId(),
@@ -1388,17 +1391,32 @@ class WhiteboardPanel {
         let allWorkspaceFiles = [];
         let selectedFileIndex = -1;
         let filteredFiles = [];
+        let fileSelectorMode = 'block'; // 'block' for linking to block, 'card' for creating new card
         const fileSearchInput = document.getElementById('fileSearchInput');
         const newFileItem = document.getElementById('newFileItem');
 
-        function openFileSelector(blockId) {
+        function openFileSelector(blockId, mode = 'block') {
+            fileSelectorMode = mode;
             selectedBlockId = blockId || contextBlockId;
             selectedFileIndex = -1;
             fileSearchInput.value = '';
+            
+            // Update modal title based on mode
+            const modalTitle = fileModal.querySelector('h3');
+            if (modalTitle) {
+                if (mode === 'card') {
+                    modalTitle.innerHTML = '<i data-lucide="file-text" class="icon"></i> Select or Create Card';
+                } else {
+                    modalTitle.innerHTML = '<i data-lucide="folder-open" class="icon"></i> Select Markdown File';
+                }
+                lucide.createIcons();
+            }
+            
             vscode.postMessage({ command: 'getWorkspaceFiles' });
             fileModal.classList.add('active');
             setTimeout(() => fileSearchInput.focus(), 100);
             hideContextMenu();
+            hideCanvasContextMenu();
         }
 
         function closeFileSelector() {
@@ -1419,6 +1437,18 @@ class WhiteboardPanel {
                     item.addEventListener('click', () => selectFile(item.dataset.file));
                 });
             }
+            
+            // Update new file button text based on search query
+            const query = fileSearchInput.value.trim();
+            const newFileText = newFileItem.querySelector('span:last-child');
+            if (newFileText) {
+                if (query) {
+                    newFileText.textContent = \`Create \${query}...\`;
+                } else {
+                    newFileText.textContent = '建立新檔案...';
+                }
+            }
+            
             updateNewFileItemSelection();
         }
 
@@ -1472,7 +1502,7 @@ class WhiteboardPanel {
                     selectFile(filteredFiles[selectedFileIndex]);
                 } else if (selectedFileIndex === filteredFiles.length) {
                     // New File selected
-                    openNewFileForBlock();
+                    handleNewFileClick();
                 }
             } else if (e.key === 'Escape') {
                 closeFileSelector();
@@ -1480,36 +1510,90 @@ class WhiteboardPanel {
         });
 
         // New File item click
-        newFileItem.addEventListener('click', openNewFileForBlock);
+        newFileItem.addEventListener('click', handleNewFileClick);
 
-        function openNewFileForBlock() {
-            closeFileSelector();
-            // Open new file modal with callback to link to block
-            newFileForBlockMode = true;
-            newCardModal.classList.add('active');
-            document.getElementById('newCardFileName').value = '';
-            document.getElementById('newCardFileName').focus();
+        function handleNewFileClick() {
+            const query = fileSearchInput.value.trim();
+            
+            if (fileSelectorMode === 'card') {
+                // Card mode: create new card
+                if (query) {
+                    // Directly create file with the search query as filename
+                    vscode.postMessage({ 
+                        command: 'createNewCard', 
+                        fileName: query,
+                        x: pendingCardPosition.x - 150,
+                        y: pendingCardPosition.y - 100
+                    });
+                    closeFileSelector();
+                } else {
+                    // No query - open modal for filename input
+                    closeFileSelector();
+                    newCardModal.classList.add('active');
+                    document.getElementById('newCardFileName').value = '';
+                    document.getElementById('newCardFileName').focus();
+                }
+            } else {
+                // Block mode: link file to block
+                if (query && selectedBlockId) {
+                    // Directly create file with the search query as filename
+                    vscode.postMessage({ 
+                        command: 'createNewCard', 
+                        fileName: query,
+                        x: 0,
+                        y: 0,
+                        forBlockId: selectedBlockId
+                    });
+                    closeFileSelector();
+                } else if (selectedBlockId) {
+                    // No query - open modal for filename input
+                    closeFileSelector();
+                    newFileForBlockMode = true;
+                    newCardModal.classList.add('active');
+                    document.getElementById('newCardFileName').value = '';
+                    document.getElementById('newCardFileName').focus();
+                }
+            }
         }
 
         let newFileForBlockMode = false;
 
         function selectFile(filePath) {
-            if (!selectedBlockId) return;
+            if (fileSelectorMode === 'card') {
+                // Add existing file as a new card
+                addCard(filePath, pendingCardPosition.x - 150, pendingCardPosition.y - 100);
+                closeFileSelector();
+            } else {
+                // Link file to block
+                if (!selectedBlockId) return;
 
-            const block = blocks.find(b => b.id === selectedBlockId);
-            if (block) {
-                block.linkedFile = filePath;
-                const element = document.getElementById(selectedBlockId);
-                element.classList.add('linked');
-                saveState();
+                const block = blocks.find(b => b.id === selectedBlockId);
+                if (block) {
+                    block.linkedFile = filePath;
+                    const element = document.getElementById(selectedBlockId);
+                    element.classList.add('linked');
+                    saveState();
+                }
+
+                closeFileSelector();
             }
+        }
 
-            closeFileSelector();
+        function updateWhiteboardTransform() {
+            whiteboard.style.transform = \`translate(\${panOffset.x}px, \${panOffset.y}px) scale(\${zoomLevel})\`;
+        }
+
+        // Convert screen coordinates to whiteboard coordinates
+        function screenToWhiteboard(screenX, screenY) {
+            return {
+                x: (screenX - panOffset.x) / zoomLevel,
+                y: (screenY - panOffset.y) / zoomLevel
+            };
         }
 
         function setZoom(level) {
             zoomLevel = Math.max(0.1, Math.min(5, level)); // Wider zoom range
-            whiteboard.style.transform = \`scale(\${zoomLevel})\`;
+            updateWhiteboardTransform();
             document.getElementById('zoomLevel').textContent = Math.round(zoomLevel * 100) + '%';
         }
 
@@ -1686,8 +1770,9 @@ class WhiteboardPanel {
             if (!draggedCard) return;
             e.preventDefault();
 
-            const x = (e.clientX + canvasContainer.scrollLeft) / zoomLevel - dragOffset.x;
-            const y = (e.clientY + canvasContainer.scrollTop) / zoomLevel - dragOffset.y;
+            const pos = screenToWhiteboard(e.clientX, e.clientY);
+            const x = pos.x - dragOffset.x;
+            const y = pos.y - dragOffset.y;
 
             draggedCard.element.style.left = x + 'px';
             draggedCard.element.style.top = y + 'px';
@@ -1771,10 +1856,8 @@ class WhiteboardPanel {
         }
 
         function showCanvasContextMenu(e) {
-            pendingCardPosition = {
-                x: (e.clientX + canvasContainer.scrollLeft) / zoomLevel,
-                y: (e.clientY + canvasContainer.scrollTop) / zoomLevel
-            };
+            const pos = screenToWhiteboard(e.clientX, e.clientY);
+            pendingCardPosition = { x: pos.x, y: pos.y };
             
             let x = e.pageX;
             let y = e.pageY;
@@ -1957,7 +2040,7 @@ class WhiteboardPanel {
             addBlock(pendingCardPosition.x - 100, pendingCardPosition.y - 50);
             hideCanvasContextMenu();
         });
-        document.getElementById('addCardFromMenu').addEventListener('click', openNewCardModal);
+        document.getElementById('addCardFromMenu').addEventListener('click', () => openFileSelector(null, 'card'));
 
         // New card modal
         document.getElementById('createCardBtn').addEventListener('click', createNewCard);
@@ -1970,14 +2053,72 @@ class WhiteboardPanel {
         // Zoom controls
         document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoomLevel + 0.1));
         document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoomLevel - 0.1));
-        document.getElementById('resetZoom').addEventListener('click', () => setZoom(1));
+        document.getElementById('resetZoom').addEventListener('click', () => {
+            setZoom(1);
+            centerWhiteboard();
+        });
+
+        // Canvas panning with middle mouse button or Alt+drag
+        let isPanning = false;
+        let panStart = { x: 0, y: 0 };
+
+        canvasContainer.addEventListener('mousedown', (e) => {
+            // Middle mouse button (button 1) or Alt+left click for panning
+            if (e.button === 1 || (e.button === 0 && e.altKey)) {
+                isPanning = true;
+                panStart = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
+                canvasContainer.style.cursor = 'grabbing';
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isPanning) {
+                panOffset.x = e.clientX - panStart.x;
+                panOffset.y = e.clientY - panStart.y;
+                updateWhiteboardTransform();
+            }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (isPanning) {
+                isPanning = false;
+                canvasContainer.style.cursor = 'grab';
+            }
+        });
+
+        // Also support Space+drag for panning (like in design tools)
+        let spacePressed = false;
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !e.repeat && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
+                spacePressed = true;
+                canvasContainer.style.cursor = 'grab';
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space') {
+                spacePressed = false;
+                if (!isPanning) {
+                    canvasContainer.style.cursor = 'grab';
+                }
+            }
+        });
+
+        canvasContainer.addEventListener('mousedown', (e) => {
+            if (spacePressed && e.button === 0) {
+                isPanning = true;
+                panStart = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
+                canvasContainer.style.cursor = 'grabbing';
+                e.preventDefault();
+            }
+        });
 
         // Double-click to add block
         canvasContainer.addEventListener('dblclick', (e) => {
             if (e.target === whiteboard || e.target === canvasContainer) {
-                const x = (e.clientX + canvasContainer.scrollLeft) / zoomLevel;
-                const y = (e.clientY + canvasContainer.scrollTop) / zoomLevel;
-                addBlock(x - 100, y - 50);
+                const pos = screenToWhiteboard(e.clientX, e.clientY);
+                addBlock(pos.x - 100, pos.y - 50);
             }
         });
 
@@ -2027,8 +2168,9 @@ class WhiteboardPanel {
             const uriList = e.dataTransfer.getData('text/uri-list');
             
             // Calculate drop position
-            const x = (e.clientX + canvasContainer.scrollLeft) / zoomLevel - 150;
-            const y = (e.clientY + canvasContainer.scrollTop) / zoomLevel - 100;
+            const pos = screenToWhiteboard(e.clientX, e.clientY);
+            const x = pos.x - 150;
+            const y = pos.y - 100;
             
             // Try to get relative path from VS Code
             if (uriList) {
@@ -2061,6 +2203,26 @@ class WhiteboardPanel {
 
         // Load initial state
         vscode.postMessage({ command: 'requestState' });
+
+        // Center the whiteboard view on load
+        function centerWhiteboard() {
+            const whiteboardWidth = whiteboard.offsetWidth;
+            const whiteboardHeight = whiteboard.offsetHeight;
+            const containerWidth = canvasContainer.clientWidth;
+            const containerHeight = canvasContainer.clientHeight;
+            
+            // Calculate center position
+            const centerX = (whiteboardWidth - containerWidth) / 2;
+            const centerY = (whiteboardHeight - containerHeight) / 2;
+            
+            // Set pan offset to center
+            panOffset.x = -centerX;
+            panOffset.y = -centerY;
+            updateWhiteboardTransform();
+        }
+        
+        // Center on initial load
+        setTimeout(centerWhiteboard, 100);
 
         // Initialize Lucide icons
         lucide.createIcons();
