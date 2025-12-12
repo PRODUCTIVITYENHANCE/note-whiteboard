@@ -2,7 +2,7 @@
     "name": "whiteboard-canvas",
     "displayName": "Whiteboard Canvas",
     "description": "A simple whiteboard with draggable blocks that can link to markdown files",
-    "version": "2.0.0",
+    "version": "1.1.0",
     "publisher": "your-publisher-name",
     "engines": {
         "vscode": "^1.74.0"
@@ -36,6 +36,16 @@
                     "when": "true"
                 }
             ]
+        },
+        "configuration": {
+            "title": "Whiteboard Canvas",
+            "properties": {
+                "whiteboard.cardFolderPath": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Relative path from workspace root for storing new markdown card files. Leave empty to use workspace root."
+                }
+            }
         }
     },
     "scripts": {

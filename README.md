@@ -1,37 +1,53 @@
 # Whiteboard Canvas
 
-A minimalist VS Code extension for visual note-taking with draggable blocks that link to markdown files.
+A minimalist VS Code extension for visual note-taking with draggable blocks and markdown file cards - inspired by Heptabase and Obsidian Canvas.
 
 ## Features
 
+### Blocks
 - 🎨 **Colorful Blocks**: Solid color blocks with 16 vibrant color options
 - 🖱️ **Drag & Drop**: Freely move blocks around the infinite canvas
 - 📄 **Markdown Linking**: Link blocks to `.md` files - linked blocks show as underlined text
+
+### Cards (Markdown Files)
+- 📝 **Inline Editing**: Edit `.md` files directly on the canvas - changes sync to file
+- 📂 **Drag & Drop**: Drag `.md` files from VS Code explorer onto the canvas
+- ↔️ **Resizable**: Drag the bottom-right corner to resize cards
+- ➕ **Quick Create**: Right-click canvas → "Add Card" to create new `.md` files
+
+### Canvas Features
 - 🔍 **Zoom Controls**: Zoom in/out with mouse wheel (Ctrl/Cmd + scroll) or UI controls
 - ⚡ **Quick Creation**: Double-click canvas to instantly create a new block
-- 🎯 **Context Menu**: Right-click blocks for color picker, file linking, and delete options
+- 🎯 **Context Menu**: Right-click for options (blocks, cards, or canvas)
 - 💾 **Auto-Save**: Your whiteboard is automatically saved per workspace
 - 🌑 **Minimalist Design**: Clean black background with no gradients
 
 ## Usage
 
-### Basic Operations
+### Blocks
+1. **Create Block**: Click ➕ button, double-click canvas, or right-click → "Add Block"
+2. **Move Block**: Click and drag anywhere on the block
+3. **Edit Text**: Double-click to enter edit mode
+4. **Change Color**: Right-click → select color from palette
+5. **Link to File**: Right-click → "Link to .md file"
 
-1. **Open Whiteboard**: Command Palette (`Cmd+Shift+P`) → "Open Whiteboard"
-2. **Create Block**: 
-   - Click ➕ button, or
-   - Double-click anywhere on the canvas
-3. **Move Block**: Click and drag the block
-4. **Edit Text**: Click the text area and start typing
-5. **Link to File**: Right-click block → "Link to .md file"
-6. **Open Linked File**: Click anywhere on a linked block (shown with underline)
+### Cards (Markdown Files)
+1. **Create Card**: Right-click canvas → "Add Card (.md)" → enter filename
+2. **Import Card**: Drag any `.md` file from the explorer onto the canvas
+3. **Edit Content**: Click inside the card and start typing (auto-saves)
+4. **Resize Card**: Drag the bottom-right corner handle
+5. **Move Card**: Drag the header bar
 
 ### Zoom & Navigation
-
 - **Zoom In/Out**: Hold `Ctrl` (or `Cmd` on Mac) + scroll mouse wheel
-- **Zoom Controls**: Use ➕ ➖ buttons in bottom-right corner
+- **Zoom Controls**: Use +/- buttons in bottom-right corner
 - **Reset Zoom**: Click ↺ button
-- **Pan Canvas**: Scroll normally to navigate the infinite canvas
+
+## Settings
+
+| Setting | Description |
+|---------|-------------|
+| `whiteboard.cardFolderPath` | Relative path for storing new card files (default: workspace root) |
 
 ## Commands
 

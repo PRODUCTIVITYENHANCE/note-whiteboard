@@ -10,6 +10,10 @@ export declare class WhiteboardPanel {
     private _openFile;
     private _browseFile;
     private _getMarkdownFiles;
+    private _readCardContent;
+    private _saveCardContent;
+    private _getCardFolderPath;
+    private _createNewCard;
     private _saveState;
     private _loadState;
     private _update;

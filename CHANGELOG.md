@@ -1,6 +1,16 @@
 # Change Log
 
-## [2.0.0] - 2024-12-12
+## [1.1.0] - 2024-12-12
+
+### Added - Cards (Markdown Files)
+- **Inline Editing**: Edit `.md` files directly on the canvas with auto-sync
+- **Drag & Drop**: Drag `.md` files from VS Code explorer onto the canvas
+- **Resizable Cards**: Drag bottom-right corner to resize
+- **Create New Cards**: Right-click canvas → "Add Card (.md)" → enter filename
+- **Card Folder Setting**: Configure where new cards are stored
+
+### Added - Canvas Context Menu
+- Right-click on canvas to show "Add Block" or "Add Card" options
 
 ### Changed
 - **Complete UI redesign** with minimalist black theme
