@@ -2,7 +2,7 @@
     "name": "whiteboard-canvas",
     "displayName": "Whiteboard Canvas",
     "description": "A whiteboard canvas for visualizing and managing markdown files",
-    "version": "1.2.4",
+    "version": "1.2.5",
     "publisher": "your-publisher-name",
     "repository": {
         "type": "git",
@@ -23,13 +23,25 @@
         "blocks"
     ],
     "icon": "media/icon.png",
-    "activationEvents": [],
+    "activationEvents": [
+        "onCustomEditor:whiteboard.editor"
+    ],
     "main": "./dist/extension.js",
     "contributes": {
         "commands": [
             {
                 "command": "whiteboard.open",
                 "title": "Open Whiteboard",
+                "category": "Whiteboard"
+            },
+            {
+                "command": "whiteboard.openAsText",
+                "title": "Open with Text Editor",
+                "category": "Whiteboard"
+            },
+            {
+                "command": "whiteboard.createNew",
+                "title": "Create New Whiteboard",
                 "category": "Whiteboard"
             }
         ],
@@ -38,9 +50,32 @@
                 {
                     "command": "whiteboard.open",
                     "when": "true"
+                },
+                {
+                    "command": "whiteboard.createNew",
+                    "when": "true"
+                }
+            ],
+            "explorer/context": [
+                {
+                    "command": "whiteboard.openAsText",
+                    "when": "resourceExtname == .whiteboard.json || resourceFilename =~ /\\.whiteboard\\.json$/",
+                    "group": "navigation"
                 }
             ]
         },
+        "customEditors": [
+            {
+                "viewType": "whiteboard.editor",
+                "displayName": "Whiteboard Canvas",
+                "selector": [
+                    {
+                        "filenamePattern": "*.whiteboard.json"
+                    }
+                ],
+                "priority": "default"
+            }
+        ],
         "configuration": {
             "title": "Whiteboard Canvas",
             "properties": {

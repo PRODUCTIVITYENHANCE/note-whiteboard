@@ -38,6 +38,7 @@ const vscode = __importStar(require("vscode"));
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 class WhiteboardPanel {
+    // Legacy: Open from command palette (uses workspaceState)
     static createOrShow(context) {
         const column = vscode.ViewColumn.One;
         // If we already have a panel, show it
@@ -55,10 +56,28 @@ class WhiteboardPanel {
         });
         WhiteboardPanel.currentPanel = new WhiteboardPanel(panel, context);
     }
-    constructor(panel, context) {
+    // New: Open from .whiteboard.json file (uses file-based storage)
+    static createFromDocument(context, panel, document) {
+        // Configure webview options
+        panel.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [
+                vscode.Uri.joinPath(context.extensionUri, 'media')
+            ]
+        };
+        const instance = new WhiteboardPanel(panel, context, document);
+        return instance;
+    }
+    constructor(panel, context, document) {
         this._disposables = [];
         this._panel = panel;
         this._context = context;
+        this._document = document;
+        // Set panel title based on document
+        if (document) {
+            const fileName = path.basename(document.uri.fsPath, '.whiteboard.json');
+            this._panel.title = `Whiteboard: ${fileName}`;
+        }
         // Set the webview's initial html content
         this._update();
         // Listen for when the panel is disposed
@@ -113,6 +132,15 @@ class WhiteboardPanel {
             await this._notifyFileDeleted(uri);
         });
         this._disposables.push(this._fileWatcher);
+        // Listen for real-time document changes (while typing, before save)
+        vscode.workspace.onDidChangeTextDocument(async (e) => {
+            if (e.document.languageId === 'markdown' || e.document.fileName.endsWith('.md')) {
+                // Debounce: only notify if there are actual content changes
+                if (e.contentChanges.length > 0) {
+                    await this._notifyFileChangedWithContent(e.document.uri, e.document.getText());
+                }
+            }
+        }, null, this._disposables);
         // Also listen for document save events (more reliable for editor changes)
         vscode.workspace.onDidSaveTextDocument(async (document) => {
             if (document.languageId === 'markdown' || document.fileName.endsWith('.md')) {
@@ -123,6 +151,38 @@ class WhiteboardPanel {
         vscode.workspace.onDidRenameFiles(async (e) => {
             await this._handleFileRename(e.files);
         }, null, this._disposables);
+    }
+    async _notifyFileChangedWithContent(uri, content) {
+        try {
+            const state = this._loadState();
+            const filePath = uri.fsPath;
+            // Check if any card is using this file
+            const matchingCards = state.cards.filter((card) => {
+                if (path.isAbsolute(card.filePath)) {
+                    return card.filePath === filePath;
+                }
+                else {
+                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                    if (workspaceFolders) {
+                        const fullCardPath = path.join(workspaceFolders[0].uri.fsPath, card.filePath);
+                        return fullCardPath === filePath;
+                    }
+                }
+                return false;
+            });
+            // Notify webview with the current editor content
+            for (const card of matchingCards) {
+                this._panel.webview.postMessage({
+                    command: 'fileChanged',
+                    cardId: card.id,
+                    filePath: card.filePath,
+                    content: content
+                });
+            }
+        }
+        catch (error) {
+            // Ignore errors
+        }
     }
     async _handleFileRename(files) {
         try {
@@ -414,10 +474,39 @@ class WhiteboardPanel {
         }
     }
     _saveState(state) {
-        this._context.workspaceState.update('whiteboardState', state);
+        if (this._document) {
+            // File-based storage: write to .whiteboard.json file
+            try {
+                const filePath = this._document.uri.fsPath;
+                fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf-8');
+            }
+            catch (error) {
+                vscode.window.showErrorMessage(`Error saving whiteboard: ${error}`);
+            }
+        }
+        else {
+            // Legacy: use workspaceState
+            this._context.workspaceState.update('whiteboardState', state);
+        }
     }
     _loadState() {
-        return this._context.workspaceState.get('whiteboardState', { blocks: [], cards: [] });
+        if (this._document) {
+            // File-based storage: read from .whiteboard.json file
+            try {
+                const content = this._document.getText();
+                if (content.trim()) {
+                    return JSON.parse(content);
+                }
+            }
+            catch (error) {
+                console.error('Error parsing whiteboard file:', error);
+            }
+            return { blocks: [], cards: [] };
+        }
+        else {
+            // Legacy: use workspaceState
+            return this._context.workspaceState.get('whiteboardState', { blocks: [], cards: [] });
+        }
     }
     _update() {
         this._panel.webview.html = this._getHtmlContent();

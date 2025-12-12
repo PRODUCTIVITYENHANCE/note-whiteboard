@@ -6,9 +6,12 @@ export declare class WhiteboardPanel {
     private readonly _context;
     private _disposables;
     private _fileWatcher;
+    private _document;
     static createOrShow(context: vscode.ExtensionContext): void;
+    static createFromDocument(context: vscode.ExtensionContext, panel: vscode.WebviewPanel, document: vscode.TextDocument): WhiteboardPanel;
     private constructor();
     private _setupFileWatcher;
+    private _notifyFileChangedWithContent;
     private _handleFileRename;
     private _notifyFileDeleted;
     private _notifyFileChanged;

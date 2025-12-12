@@ -1,5 +1,14 @@
 # Change Log
 
+## [1.2.5] - 2024-12-12
+### Added
+- **檔案型態儲存**: 新增 `.whiteboard.json` 檔案格式，白板狀態現在可以儲存為實體檔案。
+- **建立新白板指令**: Command Palette 輸入 "Create New Whiteboard" 可建立新的 `.whiteboard.json` 檔案。
+- **點擊開啟白板**: 點擊 `.whiteboard.json` 檔案將以視覺化白板方式開啟。
+- **右鍵選單**: 在 `.whiteboard.json` 檔案上按右鍵可選擇「Open with Text Editor」以文字編輯器開啟。
+- **支援版本控制**: `.whiteboard.json` 檔案可加入 Git 追蹤，便於團隊協作和版本管理。
+- **專案可攜性**: 白板狀態隨專案一起移動，不再遺失。
+
 ## [1.2.4] - 2024-12-12
 ### Improved
 - **點擊範圍精確化**: Block 和 Card 的點擊開啟檔案範圍縮小至文字本身，避免誤觸。
