@@ -136,6 +136,85 @@ export class WhiteboardPanel {
                 await this._notifyFileChanged(document.uri);
             }
         }, null, this._disposables);
+
+        // Listen for file rename events to update links
+        vscode.workspace.onDidRenameFiles(async (e) => {
+            await this._handleFileRename(e.files);
+        }, null, this._disposables);
+    }
+
+    private async _handleFileRename(files: readonly { oldUri: vscode.Uri; newUri: vscode.Uri }[]) {
+        try {
+            const state = this._loadState();
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders) return;
+
+            const workspaceRoot = workspaceFolders[0].uri.fsPath;
+            let stateChanged = false;
+
+            for (const { oldUri, newUri } of files) {
+                // Only handle .md files
+                if (!oldUri.fsPath.endsWith('.md') && !newUri.fsPath.endsWith('.md')) continue;
+
+                const oldFullPath = oldUri.fsPath;
+                const newFullPath = newUri.fsPath;
+
+                // Calculate relative paths
+                const oldRelativePath = path.relative(workspaceRoot, oldFullPath);
+                const newRelativePath = path.relative(workspaceRoot, newFullPath);
+
+                // Update Cards
+                for (const card of state.cards) {
+                    const cardFullPath = path.isAbsolute(card.filePath)
+                        ? card.filePath
+                        : path.join(workspaceRoot, card.filePath);
+
+                    if (cardFullPath === oldFullPath) {
+                        // Update to new path (use relative if original was relative)
+                        card.filePath = path.isAbsolute(card.filePath) ? newFullPath : newRelativePath;
+                        stateChanged = true;
+
+                        // Notify webview about the rename
+                        this._panel.webview.postMessage({
+                            command: 'fileRenamed',
+                            cardId: card.id,
+                            oldPath: oldRelativePath,
+                            newPath: newRelativePath
+                        });
+                    }
+                }
+
+                // Update Blocks
+                for (const block of state.blocks) {
+                    if (!block.linkedFile) continue;
+
+                    const blockFullPath = path.isAbsolute(block.linkedFile)
+                        ? block.linkedFile
+                        : path.join(workspaceRoot, block.linkedFile);
+
+                    if (blockFullPath === oldFullPath) {
+                        // Update to new path (use relative if original was relative)
+                        block.linkedFile = path.isAbsolute(block.linkedFile) ? newFullPath : newRelativePath;
+                        stateChanged = true;
+
+                        // Notify webview about the rename
+                        this._panel.webview.postMessage({
+                            command: 'blockFileRenamed',
+                            blockId: block.id,
+                            oldPath: oldRelativePath,
+                            newPath: newRelativePath
+                        });
+                    }
+                }
+            }
+
+            // Save updated state
+            if (stateChanged) {
+                this._saveState(state);
+            }
+        } catch (error) {
+            console.error('Error handling file rename:', error);
+        }
     }
 
     private async _notifyFileDeleted(uri: vscode.Uri) {
@@ -576,6 +655,16 @@ export class WhiteboardPanel {
             text-underline-offset: 4px;
             pointer-events: auto;
             cursor: pointer;
+            /* Only take up text space, not full block */
+            width: auto;
+            height: auto;
+            max-width: 90%;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .block.linked .block-content:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
 
         .block-input {
@@ -911,10 +1000,10 @@ export class WhiteboardPanel {
         }
 
         .card-header .filename {
-            flex: 1;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            max-width: 200px;
         }
 
         .card-content {
@@ -1144,10 +1233,6 @@ export class WhiteboardPanel {
                     <span>建立新檔案...</span>
                 </div>
             </div>
-            <div class="modal-actions">
-                <button class="modal-btn" id="browseFileBtn">Browse System...</button>
-                <button class="modal-btn" id="closeModalBtn" style="background: transparent; border: 1px solid #333;">Cancel</button>
-            </div>
         </div>
     </div>
 
@@ -1205,12 +1290,16 @@ export class WhiteboardPanel {
         let panOffset = { x: 0, y: 0 };
         let pendingCardPosition = { x: 0, y: 0 };
 
-        // Colors palette
+        // Colors palette - 8 deep colors for white text visibility
         const colors = [
-            '#667eea', '#764ba2', '#f093fb', '#f5576c',
-            '#4facfe', '#00f2fe', '#43e97b', '#38f9d7',
-            '#fa709a', '#fee140', '#a8edea', '#fed6e3',
-            '#ffecd2', '#fcb69f', '#ff9a9e', '#fecfef'
+            '#2563eb', // 藍 Blue
+            '#dc2626', // 紅 Red
+            '#ea580c', // 橘 Orange
+            '#16a34a', // 綠 Green
+            '#4b5563', // 深灰 Dark Gray
+            '#7c3aed', // 紫 Purple
+            '#db2777', // 粉 Pink
+            '#92400e'  // 咖 Brown
         ];
 
         // Initialize color grid
@@ -1634,8 +1723,21 @@ export class WhiteboardPanel {
             };
         }
 
-        function setZoom(level) {
+        function setZoom(level, mouseX = null, mouseY = null) {
+            const oldZoom = zoomLevel;
             zoomLevel = Math.max(0.1, Math.min(5, level)); // Wider zoom range
+            
+            // If mouse position provided, zoom centered on mouse
+            if (mouseX !== null && mouseY !== null) {
+                // Calculate the point on whiteboard that mouse is pointing at
+                const pointX = (mouseX - panOffset.x) / oldZoom;
+                const pointY = (mouseY - panOffset.y) / oldZoom;
+                
+                // Adjust pan offset so that same point stays under mouse after zoom
+                panOffset.x = mouseX - pointX * zoomLevel;
+                panOffset.y = mouseY - pointY * zoomLevel;
+            }
+            
             updateWhiteboardTransform();
             document.getElementById('zoomLevel').textContent = Math.round(zoomLevel * 100) + '%';
         }
@@ -2076,6 +2178,30 @@ export class WhiteboardPanel {
                         addCard(message.filePath, message.x, message.y);
                     }
                     break;
+                case 'fileRenamed':
+                    // Card's linked file was renamed - update the card
+                    const renamedCard = cards.find(c => c.id === message.cardId);
+                    if (renamedCard) {
+                        renamedCard.filePath = message.newPath;
+                        // Update the filename display in the header
+                        const cardElement = document.getElementById(message.cardId);
+                        if (cardElement) {
+                            const filenameSpan = cardElement.querySelector('.filename');
+                            if (filenameSpan) {
+                                filenameSpan.textContent = getFileName(message.newPath);
+                            }
+                        }
+                        saveState();
+                    }
+                    break;
+                case 'blockFileRenamed':
+                    // Block's linked file was renamed - update the block
+                    const renamedBlock = blocks.find(b => b.id === message.blockId);
+                    if (renamedBlock) {
+                        renamedBlock.linkedFile = message.newPath;
+                        saveState();
+                    }
+                    break;
             }
         });
 
@@ -2097,10 +2223,6 @@ export class WhiteboardPanel {
         });
         document.getElementById('linkFileMenu').addEventListener('click', () => openFileSelector());
         document.getElementById('unlinkFileMenu').addEventListener('click', unlinkFile);
-        document.getElementById('closeModalBtn').addEventListener('click', closeFileSelector);
-        document.getElementById('browseFileBtn').addEventListener('click', () => {
-            vscode.postMessage({ command: 'browseFile', blockId: selectedBlockId });
-        });
 
         // Canvas context menu
         document.getElementById('addBlockFromMenu').addEventListener('click', () => {
@@ -2115,6 +2237,30 @@ export class WhiteboardPanel {
         document.getElementById('newCardFileName').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') createNewCard();
             if (e.key === 'Escape') closeNewCardModal();
+        });
+
+        // Click outside modal to close (on the overlay background)
+        document.getElementById('fileModal').addEventListener('click', (e) => {
+            if (e.target.id === 'fileModal') {
+                closeFileSelector();
+            }
+        });
+        document.getElementById('newCardModal').addEventListener('click', (e) => {
+            if (e.target.id === 'newCardModal') {
+                closeNewCardModal();
+            }
+        });
+
+        // Escape key to close modals
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (fileModal.classList.contains('active')) {
+                    closeFileSelector();
+                }
+                if (newCardModal.classList.contains('active')) {
+                    closeNewCardModal();
+                }
+            }
         });
 
         // Zoom controls
@@ -2251,22 +2397,26 @@ export class WhiteboardPanel {
             }
         });
 
-        // Smooth Mouse wheel zoom
+        // Smooth Mouse wheel zoom and trackpad pan
         canvasContainer.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
             if (e.ctrlKey || e.metaKey) {
-                e.preventDefault();
-                // Smooth zoom calculation
-                // deltaY usually around 100 per tick.
-                // We want gentle zoom.
+                // Pinch zoom (ctrl+wheel or trackpad pinch)
+                // Smooth zoom calculation centered on mouse position
                 const zoomSensitivity = 0.0015;
                 const delta = -e.deltaY * zoomSensitivity;
                 const newZoom = zoomLevel + delta;
                 
-                // Use requestAnimationFrame for smoother visual updates if needed, 
-                // but direct update is usually fine for this complexity.
-                setZoom(newZoom);
+                // Zoom centered on mouse position
+                setZoom(newZoom, e.clientX, e.clientY);
+            } else {
+                // Trackpad two-finger pan or regular scroll
+                panOffset.x -= e.deltaX;
+                panOffset.y -= e.deltaY;
+                updateWhiteboardTransform();
             }
-        });
+        }, { passive: false });
 
         // Load initial state
         vscode.postMessage({ command: 'requestState' });
