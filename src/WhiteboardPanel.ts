@@ -32,6 +32,7 @@ export class WhiteboardPanel {
     private readonly _panel: vscode.WebviewPanel;
     private readonly _context: vscode.ExtensionContext;
     private _disposables: vscode.Disposable[] = [];
+    private _fileWatcher: vscode.FileSystemWatcher | undefined;
 
     public static createOrShow(context: vscode.ExtensionContext) {
         const column = vscode.ViewColumn.One;
@@ -68,6 +69,9 @@ export class WhiteboardPanel {
 
         // Listen for when the panel is disposed
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+
+        // Setup file watcher for .md files
+        this._setupFileWatcher();
 
         // Handle messages from the webview
         this._panel.webview.onDidReceiveMessage(
@@ -108,6 +112,62 @@ export class WhiteboardPanel {
             null,
             this._disposables
         );
+    }
+
+    private _setupFileWatcher() {
+        // Watch for changes to .md files in the workspace
+        this._fileWatcher = vscode.workspace.createFileSystemWatcher('**/*.md');
+
+        // When a .md file is saved/changed externally
+        this._fileWatcher.onDidChange(async (uri) => {
+            await this._notifyFileChanged(uri);
+        });
+
+        this._disposables.push(this._fileWatcher);
+
+        // Also listen for document save events (more reliable for editor changes)
+        vscode.workspace.onDidSaveTextDocument(async (document) => {
+            if (document.languageId === 'markdown' || document.fileName.endsWith('.md')) {
+                await this._notifyFileChanged(document.uri);
+            }
+        }, null, this._disposables);
+    }
+
+    private async _notifyFileChanged(uri: vscode.Uri) {
+        try {
+            const state = this._loadState();
+            const filePath = uri.fsPath;
+
+            // Check if any card is using this file
+            const matchingCards = state.cards.filter((card: Card) => {
+                // Handle both absolute and relative paths
+                if (path.isAbsolute(card.filePath)) {
+                    return card.filePath === filePath;
+                } else {
+                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                    if (workspaceFolders) {
+                        const fullCardPath = path.join(workspaceFolders[0].uri.fsPath, card.filePath);
+                        return fullCardPath === filePath;
+                    }
+                }
+                return false;
+            });
+
+            // If we found matching cards, read the file and notify the webview
+            if (matchingCards.length > 0) {
+                const content = fs.readFileSync(filePath, 'utf-8');
+                for (const card of matchingCards) {
+                    this._panel.webview.postMessage({
+                        command: 'fileChanged',
+                        cardId: card.id,
+                        filePath: card.filePath,
+                        content: content
+                    });
+                }
+            }
+        } catch (error) {
+            // File might not exist or other error, just ignore
+        }
     }
 
     private async _openFile(filePath: string) {
@@ -718,6 +778,16 @@ export class WhiteboardPanel {
             z-index: 1000;
         }
 
+        .card.external-change {
+            border-color: #f5a623;
+            animation: pulse-border 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-color: #f5a623; }
+            50% { border-color: #ffd700; box-shadow: 0 0 12px rgba(245, 166, 35, 0.5); }
+        }
+
         .card-header {
             padding: 10px 14px;
             background: #252525;
@@ -1192,6 +1262,14 @@ export class WhiteboardPanel {
             });
         }
 
+        // Helper function to extract filename from path
+        function getFileName(filePath) {
+            if (!filePath) return 'Unknown';
+            // Handle both forward and backward slashes
+            const parts = filePath.replace(/\\\\/g, '/').split('/');
+            return parts[parts.length - 1];
+        }
+
         function createCardElement(card) {
             const div = document.createElement('div');
             div.className = 'card';
@@ -1201,10 +1279,11 @@ export class WhiteboardPanel {
             div.style.width = (card.width || 300) + 'px';
             div.style.height = (card.height || 200) + 'px';
 
-            // Header
+            // Header - only show filename, not full path
             const header = document.createElement('div');
             header.className = 'card-header';
-            header.innerHTML = \`<span>📄</span><span class="filename">\${card.filePath}</span>\`;
+            const displayName = getFileName(card.filePath);
+            header.innerHTML = \`<span>📄</span><span class="filename">\${displayName}</span>\`;
             div.appendChild(header);
 
             // Content
@@ -1435,6 +1514,30 @@ export class WhiteboardPanel {
                         cardTextarea.placeholder = 'Type here...';
                     }
                     break;
+                case 'fileChanged':
+                    // File was changed externally (e.g., in VS Code editor)
+                    // Update the card content if it's not currently being edited
+                    const changedTextarea = document.querySelector(\`textarea[data-card-id="\${message.cardId}"]\`);
+                    if (changedTextarea) {
+                        // Only update if the textarea is not focused (user not actively editing)
+                        if (document.activeElement !== changedTextarea) {
+                            changedTextarea.value = message.content;
+                        } else {
+                            // If user is editing, store the new content and notify later
+                            changedTextarea.dataset.pendingContent = message.content;
+                            // Add a visual indicator that file was changed externally
+                            const card = changedTextarea.closest('.card');
+                            if (card && !card.classList.contains('external-change')) {
+                                card.classList.add('external-change');
+                                // Remove the indicator when user clicks away
+                                changedTextarea.addEventListener('blur', function onBlur() {
+                                    card.classList.remove('external-change');
+                                    changedTextarea.removeEventListener('blur', onBlur);
+                                }, { once: true });
+                            }
+                        }
+                    }
+                    break;
                 case 'cardCreated':
                     addCard(message.filePath, message.x, message.y);
                     break;
@@ -1580,6 +1683,11 @@ export class WhiteboardPanel {
 
     public dispose() {
         WhiteboardPanel.currentPanel = undefined;
+
+        // Dispose file watcher
+        if (this._fileWatcher) {
+            this._fileWatcher.dispose();
+        }
 
         this._panel.dispose();
 

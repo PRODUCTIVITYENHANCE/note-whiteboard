@@ -5,8 +5,11 @@ export declare class WhiteboardPanel {
     private readonly _panel;
     private readonly _context;
     private _disposables;
+    private _fileWatcher;
     static createOrShow(context: vscode.ExtensionContext): void;
     private constructor();
+    private _setupFileWatcher;
+    private _notifyFileChanged;
     private _openFile;
     private _browseFile;
     private _getMarkdownFiles;
