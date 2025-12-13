@@ -28,6 +28,11 @@ export interface StashCard {
     filePath: string;
     color?: string;
     lastModified: number;
+    // Original position before stashing (for restore button)
+    originalX: number;
+    originalY: number;
+    originalWidth: number;
+    originalHeight: number;
 }
 
 export interface WhiteboardState {

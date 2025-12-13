@@ -2309,11 +2309,17 @@ const vscode = acquireVsCodeApi();
             }
         });
 
-        // Drag and drop .md files from explorer
+        // Drag and drop .md files from explorer or stash items
         canvasContainer.addEventListener('dragover', (e) => {
             e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-            dropIndicator.classList.add('active');
+            // Check if it's a stash item being dragged
+            const types = e.dataTransfer.types;
+            if (types.includes('application/x-stash-id')) {
+                e.dataTransfer.dropEffect = 'move';
+            } else {
+                e.dataTransfer.dropEffect = 'copy';
+                dropIndicator.classList.add('active');
+            }
         });
 
         canvasContainer.addEventListener('dragleave', (e) => {
@@ -2326,14 +2332,22 @@ const vscode = acquireVsCodeApi();
             e.preventDefault();
             dropIndicator.classList.remove('active');
             
-            // VS Code drag-drop provides file path in dataTransfer
-            const files = e.dataTransfer.files;
-            const uriList = e.dataTransfer.getData('text/uri-list');
-            
             // Calculate drop position
             const pos = screenToWhiteboard(e.clientX, e.clientY);
             const x = pos.x - 150;
             const y = pos.y - 100;
+            
+            // Check if dropping a stash item
+            const stashId = e.dataTransfer.getData('application/x-stash-id');
+            if (stashId) {
+                // Restore from stash at drop position
+                restoreFromStash(stashId, false, pos.x, pos.y);
+                return;
+            }
+            
+            // VS Code drag-drop provides file path in dataTransfer
+            const files = e.dataTransfer.files;
+            const uriList = e.dataTransfer.getData('text/uri-list');
             
             // Try to get relative path from VS Code
             if (uriList) {
@@ -2724,26 +2738,31 @@ const vscode = acquireVsCodeApi();
         // ========== Tab 3: Stash ==========
         
         function renderStash() {
+            const panelStash = document.getElementById('panelStash');
+            
             if (stashCards.length === 0) {
                 stashListElem.style.display = 'none';
-                stashEmpty.style.display = 'block';
+                stashDropzone.classList.remove('hidden');
+                panelStash.classList.remove('has-items');
                 return;
             }
             
+            // Hide dropzone when there are items, show list
+            stashDropzone.classList.add('hidden');
             stashListElem.style.display = 'flex';
-            stashEmpty.style.display = 'none';
+            panelStash.classList.add('has-items');
             
             // Sort by lastModified (newest first)
             const sortedStash = [...stashCards].sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0));
             
             stashListElem.innerHTML = sortedStash.map(item => \`
-                <div class="stash-item" data-stash-id="\${item.id}">
+                <div class="stash-item" data-stash-id="\${item.id}" draggable="true">
                     <div class="color-dot" style="background: \${item.color || '#4b5563'}"></div>
                     <div class="stash-info">
                         <div class="stash-name">\${getFileName(item.filePath)}</div>
                     </div>
                     <div class="stash-item-actions">
-                        <button class="restore" title="恢復到白板">
+                        <button class="restore" title="恢復到原位置">
                             <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="1 4 1 10 7 10"></polyline>
                                 <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
@@ -2759,16 +2778,29 @@ const vscode = acquireVsCodeApi();
                 </div>
             \`).join('');
             
-            // Add event listeners
+            // Add event listeners for stash items
             stashListElem.querySelectorAll('.stash-item').forEach(item => {
                 const stashId = item.dataset.stashId;
                 
-                item.querySelector('.restore').addEventListener('click', () => {
-                    restoreFromStash(stashId);
+                item.querySelector('.restore').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    restoreFromStash(stashId, true); // true = use original position
                 });
                 
-                item.querySelector('.delete').addEventListener('click', () => {
+                item.querySelector('.delete').addEventListener('click', (e) => {
+                    e.stopPropagation();
                     deleteFromStash(stashId);
+                });
+                
+                // Enable drag to restore
+                item.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('application/x-stash-id', stashId);
+                    e.dataTransfer.effectAllowed = 'move';
+                    item.classList.add('dragging');
+                });
+                
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
                 });
             });
         }
@@ -2777,12 +2809,16 @@ const vscode = acquireVsCodeApi();
             const card = cards.find(c => c.id === cardId);
             if (!card) return;
             
-            // Add to stash
+            // Add to stash with original position
             stashCards.push({
                 id: card.id,
                 filePath: card.filePath,
                 color: card.color,
-                lastModified: Date.now()
+                lastModified: Date.now(),
+                originalX: card.x,
+                originalY: card.y,
+                originalWidth: card.width || 280,
+                originalHeight: card.height || 200
             });
             
             // Remove from whiteboard
@@ -2799,20 +2835,47 @@ const vscode = acquireVsCodeApi();
             saveState();
         }
         
-        function restoreFromStash(stashId) {
+        /**
+         * Restore a card from stash to whiteboard
+         * @param stashId - ID of the stash item
+         * @param useOriginalPosition - If true, restore to original position; if false, use provided position or center
+         * @param dropX - Optional X position for drop restore
+         * @param dropY - Optional Y position for drop restore
+         */
+        function restoreFromStash(stashId, useOriginalPosition = false, dropX = null, dropY = null) {
             const stashItem = stashCards.find(s => s.id === stashId);
             if (!stashItem) return;
             
-            // Get center of viewport for placement
-            const centerPos = screenToWhiteboard(canvasContainer.clientWidth / 2, canvasContainer.clientHeight / 2);
+            let x, y, width, height;
             
-            // Create new card
+            if (useOriginalPosition && stashItem.originalX !== undefined) {
+                // Restore to original position (from restore button)
+                x = stashItem.originalX;
+                y = stashItem.originalY;
+                width = stashItem.originalWidth || 280;
+                height = stashItem.originalHeight || 200;
+            } else if (dropX !== null && dropY !== null) {
+                // Restore to drop position (from drag & drop)
+                x = dropX - 140;
+                y = dropY - 100;
+                width = stashItem.originalWidth || 280;
+                height = stashItem.originalHeight || 200;
+            } else {
+                // Fallback to center of viewport
+                const centerPos = screenToWhiteboard(canvasContainer.clientWidth / 2, canvasContainer.clientHeight / 2);
+                x = centerPos.x - 140;
+                y = centerPos.y - 100;
+                width = 280;
+                height = 200;
+            }
+            
+            // Create new card at the determined position
             const newCard = {
                 id: stashItem.id,
-                x: centerPos.x - 140,
-                y: centerPos.y - 100,
-                width: 280,
-                height: 200,
+                x: x,
+                y: y,
+                width: width,
+                height: height,
                 filePath: stashItem.filePath,
                 color: stashItem.color,
                 lastModified: Date.now()
@@ -2829,6 +2892,11 @@ const vscode = acquireVsCodeApi();
             renderStash();
             renderCardList();
             saveState();
+            
+            // If restoring to original position, navigate to the card
+            if (useOriginalPosition) {
+                setTimeout(() => navigateToCard(newCard.id), 100);
+            }
         }
         
         function deleteFromStash(stashId) {

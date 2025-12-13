@@ -1018,9 +1018,20 @@ export const whiteboardStyles = `
             flex-direction: column;
         }
 
-        /* Tab 2 & Tab 3 need padding */
-        #panelCards,
+        /* Tab 2 needs padding */
+        #panelCards {
+            padding: 12px;
+        }
+        
+        /* Tab 3: Stash - no padding so dropzone can be full size */
         #panelStash {
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* When panel has items, add padding to content */
+        #panelStash.has-items {
             padding: 12px;
         }
 
@@ -1269,14 +1280,23 @@ export const whiteboardStyles = `
 
         /* Tab 3: Stash */
         .stash-dropzone {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             border: 2px dashed rgba(255, 255, 255, 0.2);
             border-radius: 8px;
-            padding: 16px;
+            margin: 12px;
             text-align: center;
             color: #666;
-            margin-bottom: 12px;
             transition: all 0.2s ease;
-            flex-shrink: 0;
+            min-height: 150px;
+        }
+        
+        /* Hide dropzone when stash has items */
+        .stash-dropzone.hidden {
+            display: none;
         }
 
         .stash-dropzone.drag-over {
@@ -1308,11 +1328,17 @@ export const whiteboardStyles = `
             border-radius: 8px;
             gap: 10px;
             transition: all 0.2s ease;
+            cursor: grab;
         }
 
         .stash-item:hover {
             background: rgba(255, 255, 255, 0.1);
             border-color: #444;
+        }
+        
+        .stash-item.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
         }
 
 
@@ -1371,10 +1397,7 @@ export const whiteboardStyles = `
         }
 
         .stash-empty {
-            text-align: center;
-            padding: 20px;
-            color: #666;
-            font-size: 13px;
+            display: none;
         }
 
         /* Sidebar is now overlay, no need to adjust toolbar or canvas */
