@@ -1,6 +1,6 @@
 {
-    "name": "vscode-canva",
-    "displayName": "VS Code Canva",
+    "name": "note-whiteboard",
+    "displayName": "Note Whiteboard",
     "description": "A whiteboard canvas for visualizing and managing markdown files",
     "version": "1.0.0",
     "publisher": "panpan",
