@@ -2642,16 +2642,35 @@ const vscode = acquireVsCodeApi();
         // Also support Space+drag for panning (like in design tools)
         let spacePressed = false;
         document.addEventListener('keydown', (e) => {
-            const isEditing = document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT';
+            const isEditingTextarea = document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT';
+            
+            // Check if any Milkdown editor is focused or if we're in a contenteditable element
+            let isEditingMilkdown = false;
+            const activeEl = document.activeElement;
+            if (activeEl) {
+                // Check if inside a Milkdown container (either class name)
+                const milkdownContainer = activeEl.closest('.milkdown-container') || activeEl.closest('.milkdown-editor-wrapper');
+                if (milkdownContainer) {
+                    isEditingMilkdown = true;
+                }
+                // Also check for contenteditable (Milkdown uses ProseMirror which uses contenteditable)
+                // Check if the element itself or any ancestor is contenteditable
+                if (activeEl.isContentEditable) {
+                    isEditingMilkdown = true;
+                }
+            }
+            
+            const isEditing = isEditingTextarea || isEditingMilkdown;
             
             // Handle Cmd/Ctrl+Z (Undo) and Cmd/Ctrl+Shift+Z (Redo)
             if ((e.metaKey || e.ctrlKey) && e.code === 'KeyZ') {
                 if (isEditing) {
-                    // Let native browser handle text undo/redo
+                    // Let native browser / Milkdown handle text undo/redo
+                    // Milkdown has its own history plugin that handles undo/redo
                     return;
                 }
                 
-                // Whiteboard undo/redo
+                // Whiteboard undo/redo (position changes)
                 e.preventDefault();
                 if (e.shiftKey) {
                     redo();
