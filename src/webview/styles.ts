@@ -1553,6 +1553,33 @@ export const whiteboardStyles = `
            Milkdown Editor Styles
            ======================================== */
         
+        /* Wrapper for Milkdown editor inside cards */
+        .milkdown-editor-wrapper {
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            background: transparent;
+        }
+        
+        /* Scrollbar for milkdown wrapper */
+        .milkdown-editor-wrapper::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .milkdown-editor-wrapper::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .milkdown-editor-wrapper::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
+        }
+
+        .milkdown-editor-wrapper::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
         /* Container for Milkdown editor inside cards */
         .milkdown-container {
             width: 100%;

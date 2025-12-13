@@ -2864,38 +2864,70 @@ const vscode = acquireVsCodeApi();
 
         // Smooth Mouse wheel zoom and trackpad pan
         canvasContainer.addEventListener('wheel', (e) => {
-            // If the active element is a textarea (editing card), handle specially
-            const activeElement = document.activeElement;
-            if (activeElement && activeElement.tagName === 'TEXTAREA') {
-                const textarea = activeElement;
-                const editingCard = textarea.closest('.card.editing, .block.editing');
+            // Check if we're inside an editing card (using Milkdown or textarea)
+            // Find the closest card element from the event target
+            const targetCard = e.target.closest('.card');
+            
+            if (targetCard) {
+                const cardRect = targetCard.getBoundingClientRect();
+                const isMouseInsideCard = e.clientX >= cardRect.left && e.clientX <= cardRect.right &&
+                                          e.clientY >= cardRect.top && e.clientY <= cardRect.bottom;
                 
-                if (editingCard) {
-                    const cardRect = editingCard.getBoundingClientRect();
-                    const isMouseInsideCard = e.clientX >= cardRect.left && e.clientX <= cardRect.right &&
-                                              e.clientY >= cardRect.top && e.clientY <= cardRect.bottom;
-                    
-                    if (isMouseInsideCard) {
-                        // Mouse is inside the editing card
-                        // Check if the textarea can scroll
-                        const canScrollUp = textarea.scrollTop > 0;
-                        const canScrollDown = textarea.scrollTop < (textarea.scrollHeight - textarea.clientHeight);
+                if (isMouseInsideCard) {
+                    // Check for Milkdown editor first
+                    const milkdownWrapper = targetCard.querySelector('.milkdown-editor-wrapper');
+                    if (milkdownWrapper && targetCard.classList.contains('using-milkdown')) {
+                        // Check if the Milkdown container can scroll
+                        const canScrollUp = milkdownWrapper.scrollTop > 0;
+                        const canScrollDown = milkdownWrapper.scrollTop < (milkdownWrapper.scrollHeight - milkdownWrapper.clientHeight);
+                        const hasScroll = milkdownWrapper.scrollHeight > milkdownWrapper.clientHeight;
                         
-                        // If scrolling and textarea can scroll in that direction, let it scroll
-                        if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
-                            e.stopPropagation();
-                            return;
-                        }
-                        
-                        // Textarea can't scroll in that direction, but mouse is still inside card
-                        // Block panning/zooming to prevent accidental operations while editing
-                        // Exception: Allow zoom with Ctrl/Cmd
-                        if (!e.ctrlKey && !e.metaKey) {
-                            e.preventDefault();
-                            return;
+                        if (hasScroll) {
+                            // If scrolling and container can scroll in that direction, let it scroll
+                            if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
+                                e.stopPropagation();
+                                return;
+                            }
+                            
+                            // Container can't scroll in that direction, but has scrollbar
+                            // Block panning to prevent accidental operations while editing
+                            // Exception: Allow zoom with Ctrl/Cmd
+                            if (!e.ctrlKey && !e.metaKey) {
+                                e.preventDefault();
+                                return;
+                            }
                         }
                     }
-                    // Mouse is outside the editing card - fall through to normal pan/zoom handling
+                    
+                    // Check for textarea (fallback mode)
+                    const activeElement = document.activeElement;
+                    if (activeElement && activeElement.tagName === 'TEXTAREA') {
+                        const textarea = activeElement;
+                        const editingCard = textarea.closest('.card.editing, .block.editing');
+                        
+                        if (editingCard && editingCard === targetCard) {
+                            // Check if the textarea can scroll
+                            const canScrollUp = textarea.scrollTop > 0;
+                            const canScrollDown = textarea.scrollTop < (textarea.scrollHeight - textarea.clientHeight);
+                            const hasScroll = textarea.scrollHeight > textarea.clientHeight;
+                            
+                            if (hasScroll) {
+                                // If scrolling and textarea can scroll in that direction, let it scroll
+                                if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
+                                    e.stopPropagation();
+                                    return;
+                                }
+                                
+                                // Textarea can't scroll in that direction, but has scrollbar
+                                // Block panning to prevent accidental operations while editing
+                                // Exception: Allow zoom with Ctrl/Cmd
+                                if (!e.ctrlKey && !e.metaKey) {
+                                    e.preventDefault();
+                                    return;
+                                }
+                            }
+                        }
+                    }
                 }
             }
             
