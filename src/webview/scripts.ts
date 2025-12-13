@@ -2907,8 +2907,18 @@ const vscode = acquireVsCodeApi();
         const SCROLL_GESTURE_TIMEOUT = 150; // ms - reset scroll origin after this pause
         
         canvasContainer.addEventListener('wheel', (e) => {
+            // ALWAYS allow zoom with Ctrl/Cmd regardless of any state
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                const zoomSensitivity = 0.004;
+                const delta = -e.deltaY * zoomSensitivity;
+                const newZoom = zoomLevel + delta;
+                setZoom(newZoom, e.clientX, e.clientY);
+                return;
+            }
+
             const now = Date.now();
-            
+
             // Reset scroll origin tracking if there's been a pause in scrolling
             if (now - lastWheelTime > SCROLL_GESTURE_TIMEOUT) {
                 // New scroll gesture - check where it started
@@ -2966,20 +2976,10 @@ const vscode = acquireVsCodeApi();
                                 }
 
                                 // Container can't scroll in that direction, but has scrollbar
-                                // Allow zoom with Ctrl/Cmd, but block panning
-                                if (e.ctrlKey || e.metaKey) {
-                                    // Allow zoom - continue to zoom handling below
-                                    e.preventDefault();
-                                    const zoomSensitivity = 0.004;
-                                    const delta = -e.deltaY * zoomSensitivity;
-                                    const newZoom = zoomLevel + delta;
-                                    setZoom(newZoom, e.clientX, e.clientY);
-                                    return;
-                                } else {
-                                    // Block panning to prevent accidental operations while editing
-                                    e.preventDefault();
-                                    return;
-                                }
+                                // Block panning to prevent accidental operations while editing
+                                // (Ctrl/Cmd + wheel zoom is already handled at the start)
+                                e.preventDefault();
+                                return;
                             }
                         }
                         
@@ -3003,20 +3003,10 @@ const vscode = acquireVsCodeApi();
                                     }
 
                                     // Textarea can't scroll in that direction, but has scrollbar
-                                    // Allow zoom with Ctrl/Cmd, but block panning
-                                    if (e.ctrlKey || e.metaKey) {
-                                        // Allow zoom - continue to zoom handling below
-                                        e.preventDefault();
-                                        const zoomSensitivity = 0.004;
-                                        const delta = -e.deltaY * zoomSensitivity;
-                                        const newZoom = zoomLevel + delta;
-                                        setZoom(newZoom, e.clientX, e.clientY);
-                                        return;
-                                    } else {
-                                        // Block panning to prevent accidental operations while editing
-                                        e.preventDefault();
-                                        return;
-                                    }
+                                    // Block panning to prevent accidental operations while editing
+                                    // (Ctrl/Cmd + wheel zoom is already handled at the start)
+                                    e.preventDefault();
+                                    return;
                                 }
                             }
                         }
