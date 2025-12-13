@@ -2882,67 +2882,117 @@ const vscode = acquireVsCodeApi();
         });
 
         // Smooth Mouse wheel zoom and trackpad pan
+        // Track where scroll gesture started to determine behavior
+        let scrollStartedInEditingCard = false;
+        let lastWheelTime = 0;
+        const SCROLL_GESTURE_TIMEOUT = 150; // ms - reset scroll origin after this pause
+        
         canvasContainer.addEventListener('wheel', (e) => {
-            // Check if we're inside an editing card (using Milkdown or textarea)
-            // Find the closest card element from the event target
-            const targetCard = e.target.closest('.card');
+            const now = Date.now();
             
-            if (targetCard) {
-                const cardRect = targetCard.getBoundingClientRect();
-                const isMouseInsideCard = e.clientX >= cardRect.left && e.clientX <= cardRect.right &&
-                                          e.clientY >= cardRect.top && e.clientY <= cardRect.bottom;
+            // Reset scroll origin tracking if there's been a pause in scrolling
+            if (now - lastWheelTime > SCROLL_GESTURE_TIMEOUT) {
+                // New scroll gesture - check where it started
+                const targetCard = e.target.closest('.card');
+                scrollStartedInEditingCard = false;
                 
-                if (isMouseInsideCard) {
-                    // Check for Milkdown editor first
-                    const milkdownWrapper = targetCard.querySelector('.milkdown-editor-wrapper');
-                    if (milkdownWrapper && targetCard.classList.contains('using-milkdown')) {
-                        // Check if the Milkdown container can scroll
-                        const canScrollUp = milkdownWrapper.scrollTop > 0;
-                        const canScrollDown = milkdownWrapper.scrollTop < (milkdownWrapper.scrollHeight - milkdownWrapper.clientHeight);
-                        const hasScroll = milkdownWrapper.scrollHeight > milkdownWrapper.clientHeight;
-                        
-                        if (hasScroll) {
-                            // If scrolling and container can scroll in that direction, let it scroll
-                            if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
-                                e.stopPropagation();
-                                return;
-                            }
-                            
-                            // Container can't scroll in that direction, but has scrollbar
-                            // Block panning to prevent accidental operations while editing
-                            // Exception: Allow zoom with Ctrl/Cmd
-                            if (!e.ctrlKey && !e.metaKey) {
-                                e.preventDefault();
-                                return;
-                            }
+                if (targetCard) {
+                    // Check if this card is being edited with Milkdown
+                    if (targetCard.classList.contains('using-milkdown')) {
+                        const milkdownWrapper = targetCard.querySelector('.milkdown-editor-wrapper');
+                        if (milkdownWrapper && milkdownWrapper.scrollHeight > milkdownWrapper.clientHeight) {
+                            scrollStartedInEditingCard = true;
                         }
                     }
-                    
-                    // Check for textarea (fallback mode)
+                    // Check textarea fallback
                     const activeElement = document.activeElement;
                     if (activeElement && activeElement.tagName === 'TEXTAREA') {
-                        const textarea = activeElement;
-                        const editingCard = textarea.closest('.card.editing, .block.editing');
-                        
-                        if (editingCard && editingCard === targetCard) {
-                            // Check if the textarea can scroll
-                            const canScrollUp = textarea.scrollTop > 0;
-                            const canScrollDown = textarea.scrollTop < (textarea.scrollHeight - textarea.clientHeight);
-                            const hasScroll = textarea.scrollHeight > textarea.clientHeight;
+                        const editingCard = activeElement.closest('.card.editing, .block.editing');
+                        if (editingCard === targetCard && activeElement.scrollHeight > activeElement.clientHeight) {
+                            scrollStartedInEditingCard = true;
+                        }
+                    }
+                }
+            }
+            lastWheelTime = now;
+            
+            // Only handle card scrolling if the gesture started inside an editing card
+            if (scrollStartedInEditingCard) {
+                const targetCard = e.target.closest('.card');
+                
+                if (targetCard) {
+                    const cardRect = targetCard.getBoundingClientRect();
+                    const isMouseInsideCard = e.clientX >= cardRect.left && e.clientX <= cardRect.right &&
+                                              e.clientY >= cardRect.top && e.clientY <= cardRect.bottom;
+                    
+                    if (isMouseInsideCard) {
+                        // Check for Milkdown editor first
+                        const milkdownWrapper = targetCard.querySelector('.milkdown-editor-wrapper');
+                        if (milkdownWrapper && targetCard.classList.contains('using-milkdown')) {
+                            // Check if the Milkdown container can scroll
+                            const canScrollUp = milkdownWrapper.scrollTop > 0;
+                            const canScrollDown = milkdownWrapper.scrollTop < (milkdownWrapper.scrollHeight - milkdownWrapper.clientHeight);
+                            const hasScroll = milkdownWrapper.scrollHeight > milkdownWrapper.clientHeight;
                             
                             if (hasScroll) {
-                                // If scrolling and textarea can scroll in that direction, let it scroll
+                                // If scrolling and container can scroll in that direction, let it scroll
                                 if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
                                     e.stopPropagation();
                                     return;
                                 }
-                                
-                                // Textarea can't scroll in that direction, but has scrollbar
-                                // Block panning to prevent accidental operations while editing
-                                // Exception: Allow zoom with Ctrl/Cmd
-                                if (!e.ctrlKey && !e.metaKey) {
+
+                                // Container can't scroll in that direction, but has scrollbar
+                                // Allow zoom with Ctrl/Cmd, but block panning
+                                if (e.ctrlKey || e.metaKey) {
+                                    // Allow zoom - continue to zoom handling below
+                                    e.preventDefault();
+                                    const zoomSensitivity = 0.004;
+                                    const delta = -e.deltaY * zoomSensitivity;
+                                    const newZoom = zoomLevel + delta;
+                                    setZoom(newZoom, e.clientX, e.clientY);
+                                    return;
+                                } else {
+                                    // Block panning to prevent accidental operations while editing
                                     e.preventDefault();
                                     return;
+                                }
+                            }
+                        }
+                        
+                        // Check for textarea (fallback mode)
+                        const activeElement = document.activeElement;
+                        if (activeElement && activeElement.tagName === 'TEXTAREA') {
+                            const textarea = activeElement;
+                            const editingCard = textarea.closest('.card.editing, .block.editing');
+                            
+                            if (editingCard && editingCard === targetCard) {
+                                // Check if the textarea can scroll
+                                const canScrollUp = textarea.scrollTop > 0;
+                                const canScrollDown = textarea.scrollTop < (textarea.scrollHeight - textarea.clientHeight);
+                                const hasScroll = textarea.scrollHeight > textarea.clientHeight;
+                                
+                                if (hasScroll) {
+                                    // If scrolling and textarea can scroll in that direction, let it scroll
+                                    if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
+                                        e.stopPropagation();
+                                        return;
+                                    }
+
+                                    // Textarea can't scroll in that direction, but has scrollbar
+                                    // Allow zoom with Ctrl/Cmd, but block panning
+                                    if (e.ctrlKey || e.metaKey) {
+                                        // Allow zoom - continue to zoom handling below
+                                        e.preventDefault();
+                                        const zoomSensitivity = 0.004;
+                                        const delta = -e.deltaY * zoomSensitivity;
+                                        const newZoom = zoomLevel + delta;
+                                        setZoom(newZoom, e.clientX, e.clientY);
+                                        return;
+                                    } else {
+                                        // Block panning to prevent accidental operations while editing
+                                        e.preventDefault();
+                                        return;
+                                    }
                                 }
                             }
                         }
