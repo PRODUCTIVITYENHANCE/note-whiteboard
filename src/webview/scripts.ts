@@ -2601,7 +2601,7 @@ const vscode = acquireVsCodeApi();
             if (e.ctrlKey || e.metaKey) {
                 // Pinch zoom (ctrl+wheel or trackpad pinch)
                 // Smooth zoom calculation centered on mouse position
-                const zoomSensitivity = 0.0015;
+                const zoomSensitivity = 0.004;
                 const delta = -e.deltaY * zoomSensitivity;
                 const newZoom = zoomLevel + delta;
                 
