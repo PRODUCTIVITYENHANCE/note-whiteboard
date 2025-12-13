@@ -3,7 +3,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 // Data format version - increment when making breaking changes to the data structure
-const CURRENT_DATA_VERSION = 1;
+// v2: Added lastModified to cards, pinnedFiles, stashCards for sidebar features
+const CURRENT_DATA_VERSION = 2;
 
 interface Block {
     id: string;
@@ -22,12 +23,23 @@ interface Card {
     height: number;
     filePath: string;
     color?: string;
+    lastModified?: number; // Unix timestamp of last modification
+    collapsed?: boolean;
+}
+
+interface StashCard {
+    id: string;
+    filePath: string;
+    color?: string;
+    lastModified: number;
 }
 
 interface WhiteboardState {
     version: number;
     blocks: Block[];
     cards: Card[];
+    pinnedFiles?: string[];   // Pinned files for sidebar Tab 1
+    stashCards?: StashCard[]; // Stashed cards for sidebar Tab 3
 }
 
 export class WhiteboardPanel {
@@ -152,6 +164,12 @@ export class WhiteboardPanel {
                     case 'getWorkspaceFolders':
                         const folders = await this._getWorkspaceFolders();
                         this._panel.webview.postMessage({ command: 'workspaceFolders', folders });
+                        break;
+                    case 'readPinnedFileContent':
+                        await this._readPinnedFileContent(message.filePath);
+                        break;
+                    case 'savePinnedFileContent':
+                        await this._savePinnedFileContent(message.filePath, message.content);
                         break;
                 }
             },
@@ -443,6 +461,53 @@ export class WhiteboardPanel {
         }
     }
 
+    private async _readPinnedFileContent(filePath: string) {
+        try {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders) {
+                return;
+            }
+
+            let fullPath: string;
+            if (path.isAbsolute(filePath)) {
+                fullPath = filePath;
+            } else {
+                fullPath = path.join(workspaceFolders[0].uri.fsPath, filePath);
+            }
+
+            if (fs.existsSync(fullPath)) {
+                const content = fs.readFileSync(fullPath, 'utf-8');
+                this._panel.webview.postMessage({
+                    command: 'pinnedFileContent',
+                    filePath: filePath,
+                    content: content
+                });
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`Error reading pinned file: ${error}`);
+        }
+    }
+
+    private async _savePinnedFileContent(filePath: string, content: string) {
+        try {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders) {
+                return;
+            }
+
+            let fullPath: string;
+            if (path.isAbsolute(filePath)) {
+                fullPath = filePath;
+            } else {
+                fullPath = path.join(workspaceFolders[0].uri.fsPath, filePath);
+            }
+
+            fs.writeFileSync(fullPath, content, 'utf-8');
+        } catch (error) {
+            vscode.window.showErrorMessage(`Error saving pinned file: ${error}`);
+        }
+    }
+
     private _getCardFolderPath(): string {
         const config = vscode.workspace.getConfiguration('whiteboard');
         return config.get('cardFolderPath', '');
@@ -672,7 +737,9 @@ export class WhiteboardPanel {
         const stateToSave: WhiteboardState = {
             version: CURRENT_DATA_VERSION,
             blocks: state.blocks,
-            cards: state.cards
+            cards: state.cards,
+            pinnedFiles: state.pinnedFiles || [],
+            stashCards: state.stashCards || []
         };
 
         if (this._document) {
@@ -718,7 +785,7 @@ export class WhiteboardPanel {
     private _migrateState(rawState: any): WhiteboardState {
         // Default empty state
         if (!rawState) {
-            return { version: CURRENT_DATA_VERSION, blocks: [], cards: [] };
+            return { version: CURRENT_DATA_VERSION, blocks: [], cards: [], pinnedFiles: [], stashCards: [] };
         }
 
         const version = rawState.version || 0;
@@ -734,12 +801,18 @@ export class WhiteboardPanel {
             };
         }
 
-        // Future migrations can be added here:
-        // if (version < 2) {
-        //     console.log('Migrating whiteboard data from v1 to v2');
-        //     state.notes = state.notes || [];
-        //     state.version = 2;
-        // }
+        // Migration: v1 -> v2: Add lastModified to cards, add pinnedFiles and stashCards
+        if (version < 2) {
+            console.log('Migrating whiteboard data from v1 to v2');
+            const now = Date.now();
+            state.cards = (state.cards || []).map((card: any) => ({
+                ...card,
+                lastModified: card.lastModified || now
+            }));
+            state.pinnedFiles = state.pinnedFiles || [];
+            state.stashCards = state.stashCards || [];
+            state.version = 2;
+        }
 
         return state;
     }
@@ -1623,10 +1696,494 @@ export class WhiteboardPanel {
             outline-offset: 2px;
             box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.2), 0 12px 32px rgba(0, 0, 0, 0.5);
         }
+
+        /* ========== Sidebar Styles ========== */
+        #sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 320px;
+            height: 100vh;
+            background: #0d0d0d;
+            border-right: 1px solid #333;
+            z-index: 1001;
+            display: flex;
+            flex-direction: column;
+            transform: translateX(-100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #sidebar.open {
+            transform: translateX(0);
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid #333;
+            gap: 8px;
+        }
+
+        .sidebar-tabs {
+            display: flex;
+            flex: 1;
+            gap: 4px;
+        }
+
+        .sidebar-tab {
+            flex: 1;
+            padding: 10px 12px;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #888;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sidebar-tab:hover {
+            background: #1a1a1a;
+            color: #ccc;
+        }
+
+        .sidebar-tab.active {
+            background: #1a1a1a;
+            color: #fff;
+        }
+
+        .sidebar-tab svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .sidebar-close {
+            width: 32px;
+            height: 32px;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #888;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar-close:hover {
+            background: #1a1a1a;
+            color: #fff;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .sidebar-panel {
+            display: none;
+        }
+
+        .sidebar-panel.active {
+            display: block;
+        }
+
+        /* Tab 1: Pinned Files */
+        .pinned-files-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+            color: #666;
+        }
+
+        .pinned-files-empty svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 16px;
+            stroke: #444;
+        }
+
+        .select-file-btn {
+            padding: 10px 20px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: #ccc;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 16px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .select-file-btn:hover {
+            background: #2a2a2a;
+            color: #fff;
+            border-color: #555;
+        }
+
+        .pinned-file-viewer {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .pinned-file-header {
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid #333;
+            gap: 8px;
+        }
+
+        .pinned-file-header .filename {
+            flex: 1;
+            font-size: 13px;
+            color: #ccc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .pinned-file-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .pinned-file-actions button {
+            width: 24px;
+            height: 24px;
+            background: transparent;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #888;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .pinned-file-actions button:hover {
+            background: #333;
+            color: #fff;
+        }
+
+        .pinned-file-content {
+            padding: 12px;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .pinned-file-textarea {
+            width: 100%;
+            min-height: 200px;
+            background: transparent;
+            border: none;
+            color: #ccc;
+            font-size: 13px;
+            font-family: inherit;
+            line-height: 1.6;
+            resize: vertical;
+            outline: none;
+        }
+
+        /* Tab 2: Card List */
+        .card-list-controls {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .color-filter {
+            flex: 1;
+            padding: 8px 12px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #ccc;
+            font-size: 13px;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .color-filter:focus {
+            border-color: #667eea;
+        }
+
+        .card-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .card-list-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            gap: 10px;
+        }
+
+        .card-list-item:hover {
+            background: #2a2a2a;
+            border-color: #444;
+            transform: translateX(4px);
+        }
+
+        .card-list-item .color-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .card-list-item .card-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .card-list-item .card-name {
+            font-size: 14px;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+
+        .card-list-item .card-time {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .card-list-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+        }
+
+        /* Tab 3: Stash */
+        .stash-dropzone {
+            border: 2px dashed #333;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            margin-bottom: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .stash-dropzone.drag-over {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+        }
+
+        .stash-dropzone svg {
+            width: 32px;
+            height: 32px;
+            margin-bottom: 8px;
+        }
+
+        .stash-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .stash-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            gap: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .stash-item:hover {
+            background: #2a2a2a;
+            border-color: #444;
+        }
+
+        .stash-item .color-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .stash-item .stash-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .stash-item .stash-name {
+            font-size: 14px;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stash-item-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .stash-item-actions button {
+            width: 28px;
+            height: 28px;
+            background: transparent;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #888;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .stash-item-actions button:hover {
+            background: #333;
+            color: #fff;
+        }
+
+        .stash-item-actions button.restore:hover {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .stash-item-actions button.delete:hover {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .stash-empty {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 13px;
+        }
+
+        /* Adjust toolbar when sidebar is open */
+        #toolbar.sidebar-open {
+            left: 336px;
+        }
+
+        /* Adjust canvas container when sidebar is open */
+        #canvas-container.sidebar-open {
+            margin-left: 320px;
+            width: calc(100% - 320px);
+        }
     </style>
 </head>
 <body>
+    <!-- Sidebar -->
+    <div id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-tabs">
+                <button class="sidebar-tab active" id="tabPinned" title="常用文件">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                </button>
+                <button class="sidebar-tab" id="tabCards" title="卡片清單">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    </svg>
+                </button>
+                <button class="sidebar-tab" id="tabStash" title="暫存區">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                    </svg>
+                </button>
+            </div>
+            <button class="sidebar-close" id="closeSidebar" title="關閉側邊欄">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="sidebar-content">
+            <!-- Tab 1: Pinned Files -->
+            <div class="sidebar-panel active" id="panelPinned">
+                <div class="pinned-files-empty" id="pinnedEmpty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    <div>尚無固定的文件</div>
+                    <button class="select-file-btn" id="selectPinnedFile">
+                        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Select file
+                    </button>
+                </div>
+                <div id="pinnedFileViewer" style="display: none;"></div>
+            </div>
+
+            <!-- Tab 2: Card List -->
+            <div class="sidebar-panel" id="panelCards">
+                <div class="card-list-controls">
+                    <select class="color-filter" id="colorFilter">
+                        <option value="">所有顏色</option>
+                    </select>
+                </div>
+                <div class="card-list" id="cardList"></div>
+                <div class="card-list-empty" id="cardListEmpty" style="display: none;">
+                    白板中沒有卡片
+                </div>
+            </div>
+
+            <!-- Tab 3: Stash -->
+            <div class="sidebar-panel" id="panelStash">
+                <div class="stash-dropzone" id="stashDropzone">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                    </svg>
+                    <div>拖曳卡片到此處暫存</div>
+                </div>
+                <div class="stash-list" id="stashList"></div>
+                <div class="stash-empty" id="stashEmpty" style="display: none;">
+                    暫存區是空的
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="toolbar">
+        <button class="toolbar-btn" id="toggleSidebar" title="Toggle Sidebar"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg></button>
         <button class="toolbar-btn" id="addBlock" title="Add Block (or double-click canvas)"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
         <button class="toolbar-btn" id="saveBtn" title="Save"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg></button>
     </div>
@@ -1798,6 +2355,36 @@ export class WhiteboardPanel {
         let selectedFolderIndex = -1; // -1 means nothing selected (focus on search input)
         let flatFolderList = []; // Flattened list of visible folders for keyboard navigation
         // ========================================
+
+        // ========== Sidebar State ==========
+        const sidebar = document.getElementById('sidebar');
+        const toolbar = document.getElementById('toolbar');
+        const toggleSidebarBtn = document.getElementById('toggleSidebar');
+        const closeSidebarBtn = document.getElementById('closeSidebar');
+        const tabPinned = document.getElementById('tabPinned');
+        const tabCards = document.getElementById('tabCards');
+        const tabStash = document.getElementById('tabStash');
+        const panelPinned = document.getElementById('panelPinned');
+        const panelCards = document.getElementById('panelCards');
+        const panelStash = document.getElementById('panelStash');
+        const pinnedEmpty = document.getElementById('pinnedEmpty');
+        const pinnedFileViewer = document.getElementById('pinnedFileViewer');
+        const selectPinnedFileBtn = document.getElementById('selectPinnedFile');
+        const cardListElem = document.getElementById('cardList');
+        const cardListEmpty = document.getElementById('cardListEmpty');
+        const colorFilterSelect = document.getElementById('colorFilter');
+        const stashDropzone = document.getElementById('stashDropzone');
+        const stashListElem = document.getElementById('stashList');
+        const stashEmpty = document.getElementById('stashEmpty');
+        
+        let pinnedFiles = [];
+        let stashCards = [];
+        let currentPinnedFile = null;
+        let pinnedFileContent = '';
+        let sidebarOpen = false;
+        let currentColorFilter = '';
+        let cardBeingDraggedToStash = null;
+        // ===================================
 
         // Colors palette - 8 deep colors for white text visibility
         const colors = [
@@ -2092,6 +2679,8 @@ export class WhiteboardPanel {
             if (modalTitle) {
                 if (mode === 'card') {
                     modalTitle.innerHTML = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line></svg> Select or Create Card';
+                } else if (mode === 'pinned') {
+                    modalTitle.innerHTML = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg> Select Pinned File';
                 } else {
                     modalTitle.innerHTML = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"></path></svg> Select Markdown File';
                 }
@@ -2265,6 +2854,15 @@ export class WhiteboardPanel {
                 // Add existing file as a new card
                 addCard(filePath, pendingCardPosition.x - 150, pendingCardPosition.y - 100);
                 closeFileSelector();
+            } else if (fileSelectorMode === 'pinned') {
+                // Add file to pinned files list
+                if (!pinnedFiles.includes(filePath)) {
+                    pinnedFiles.push(filePath);
+                }
+                currentPinnedFile = filePath;
+                closeFileSelector();
+                renderPinnedFiles();
+                saveState();
             } else {
                 // Link file to block
                 if (!selectedBlockId) return;
@@ -2602,7 +3200,7 @@ export class WhiteboardPanel {
                 return; // No changes, skip save
             }
 
-            const currentState = JSON.stringify({ blocks, cards });
+            const currentState = JSON.stringify({ blocks, cards, pinnedFiles, stashCards });
             
             // Check if state actually changed (deep comparison)
             if (lastSavedState === currentState) {
@@ -2611,7 +3209,7 @@ export class WhiteboardPanel {
             }
 
             // Actually save
-            vscode.postMessage({ command: 'saveState', state: { blocks, cards } });
+            vscode.postMessage({ command: 'saveState', state: { blocks, cards, pinnedFiles, stashCards } });
             lastSavedState = currentState;
             isDirty = false;
         }
@@ -2631,6 +3229,9 @@ export class WhiteboardPanel {
         function loadState(state) {
             blocks = state.blocks || [];
             cards = state.cards || [];
+            pinnedFiles = state.pinnedFiles || [];
+            stashCards = state.stashCards || [];
+            
             whiteboard.innerHTML = '';
             blocks.forEach(block => {
                 const element = createBlockElement(block);
@@ -2642,6 +3243,9 @@ export class WhiteboardPanel {
                 // Load card content
                 vscode.postMessage({ command: 'readCardContent', cardId: card.id, filePath: card.filePath });
             });
+            
+            // Initialize sidebar data
+            initSidebar();
         }
 
         // Helper function to convert hex color to rgba with alpha
@@ -2837,6 +3441,9 @@ export class WhiteboardPanel {
                         filePath: card.filePath, 
                         content: textarea.value 
                     });
+                    // Update lastModified timestamp
+                    updateCardLastModified(card.id);
+                    saveState();
                 }, 500);
             });
 
@@ -3435,6 +4042,13 @@ export class WhiteboardPanel {
                     filteredFolders = message.folders;
                     renderFolderList(message.folders);
                     break;
+                case 'pinnedFileContent':
+                    // Received content for pinned file in sidebar
+                    const pinnedTextarea = document.getElementById('pinnedTextarea');
+                    if (pinnedTextarea && message.filePath === currentPinnedFile) {
+                        pinnedTextarea.value = message.content;
+                    }
+                    break;
             }
         });
 
@@ -3847,6 +4461,453 @@ export class WhiteboardPanel {
 
         // Load initial state
         vscode.postMessage({ command: 'requestState' });
+
+        // ========== Sidebar Functions ==========
+        
+        /**
+         * Initialize sidebar with loaded state data
+         */
+        function initSidebar() {
+            // Initialize color filter options
+            initColorFilter();
+            
+            // Render pinned files
+            renderPinnedFiles();
+            
+            // Render card list
+            renderCardList();
+            
+            // Render stash
+            renderStash();
+        }
+        
+        /**
+         * Toggle sidebar open/close
+         */
+        function toggleSidebar() {
+            sidebarOpen = !sidebarOpen;
+            if (sidebarOpen) {
+                sidebar.classList.add('open');
+                toolbar.classList.add('sidebar-open');
+                canvasContainer.classList.add('sidebar-open');
+            } else {
+                sidebar.classList.remove('open');
+                toolbar.classList.remove('sidebar-open');
+                canvasContainer.classList.remove('sidebar-open');
+            }
+        }
+        
+        /**
+         * Switch sidebar tab
+         */
+        function switchTab(tabName) {
+            // Update tab buttons
+            [tabPinned, tabCards, tabStash].forEach(tab => tab.classList.remove('active'));
+            [panelPinned, panelCards, panelStash].forEach(panel => panel.classList.remove('active'));
+            
+            if (tabName === 'pinned') {
+                tabPinned.classList.add('active');
+                panelPinned.classList.add('active');
+            } else if (tabName === 'cards') {
+                tabCards.classList.add('active');
+                panelCards.classList.add('active');
+                renderCardList(); // Refresh list when switching to this tab
+            } else if (tabName === 'stash') {
+                tabStash.classList.add('active');
+                panelStash.classList.add('active');
+                renderStash();
+            }
+        }
+        
+        // Sidebar event listeners
+        toggleSidebarBtn.addEventListener('click', toggleSidebar);
+        closeSidebarBtn.addEventListener('click', toggleSidebar);
+        tabPinned.addEventListener('click', () => switchTab('pinned'));
+        tabCards.addEventListener('click', () => switchTab('cards'));
+        tabStash.addEventListener('click', () => switchTab('stash'));
+        
+        // ========== Tab 1: Pinned Files ==========
+        
+        function renderPinnedFiles() {
+            if (pinnedFiles.length === 0) {
+                pinnedEmpty.style.display = 'flex';
+                pinnedFileViewer.style.display = 'none';
+                pinnedFileViewer.innerHTML = '';
+                currentPinnedFile = null;
+                return;
+            }
+            
+            pinnedEmpty.style.display = 'none';
+            pinnedFileViewer.style.display = 'block';
+            
+            // For now, show the first pinned file
+            if (!currentPinnedFile || !pinnedFiles.includes(currentPinnedFile)) {
+                currentPinnedFile = pinnedFiles[0];
+            }
+            
+            pinnedFileViewer.innerHTML = \`
+                <div class="pinned-file-viewer">
+                    <div class="pinned-file-header">
+                        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                        </svg>
+                        <span class="filename">\${getFileName(currentPinnedFile)}</span>
+                        <div class="pinned-file-actions">
+                            <button class="open-pinned" title="Open in Editor">
+                                <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                                </svg>
+                            </button>
+                            <button class="unpin-file" title="Unpin">
+                                <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="pinned-file-content">
+                        <textarea class="pinned-file-textarea" id="pinnedTextarea" placeholder="Loading..."></textarea>
+                    </div>
+                </div>
+            \`;
+            
+            // Add event listeners
+            pinnedFileViewer.querySelector('.open-pinned').addEventListener('click', () => {
+                vscode.postMessage({ command: 'openFile', filePath: currentPinnedFile, splitView: true });
+            });
+            
+            pinnedFileViewer.querySelector('.unpin-file').addEventListener('click', () => {
+                pinnedFiles = pinnedFiles.filter(f => f !== currentPinnedFile);
+                currentPinnedFile = null;
+                renderPinnedFiles();
+                saveState();
+            });
+            
+            // Load file content
+            vscode.postMessage({ command: 'readPinnedFileContent', filePath: currentPinnedFile });
+            
+            // Save on change with debounce
+            const textarea = pinnedFileViewer.querySelector('#pinnedTextarea');
+            let pinnedSaveTimeout;
+            textarea.addEventListener('input', () => {
+                clearTimeout(pinnedSaveTimeout);
+                pinnedSaveTimeout = setTimeout(() => {
+                    vscode.postMessage({ 
+                        command: 'savePinnedFileContent', 
+                        filePath: currentPinnedFile, 
+                        content: textarea.value 
+                    });
+                }, 500);
+            });
+        }
+        
+        selectPinnedFileBtn.addEventListener('click', () => {
+            openFileSelector(null, 'pinned');
+        });
+        
+        // ========== Tab 2: Card List ==========
+        
+        function initColorFilter() {
+            // Clear existing options except the first "All colors" option
+            colorFilterSelect.innerHTML = '<option value="">所有顏色</option>';
+            
+            // Add color options
+            const colorNames = {
+                '#2563eb': '藍色',
+                '#dc2626': '紅色',
+                '#ea580c': '橘色',
+                '#16a34a': '綠色',
+                '#4b5563': '深灰',
+                '#7c3aed': '紫色',
+                '#db2777': '粉色',
+                '#92400e': '咖啡'
+            };
+            
+            colors.forEach(color => {
+                const option = document.createElement('option');
+                option.value = color;
+                option.textContent = colorNames[color] || color;
+                option.style.color = color;
+                colorFilterSelect.appendChild(option);
+            });
+        }
+        
+        colorFilterSelect.addEventListener('change', (e) => {
+            currentColorFilter = e.target.value;
+            renderCardList();
+        });
+        
+        function formatTimeAgo(timestamp) {
+            if (!timestamp) return '';
+            const now = Date.now();
+            const diff = now - timestamp;
+            
+            const minutes = Math.floor(diff / (1000 * 60));
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            
+            if (minutes < 1) return '剛剛';
+            if (minutes < 60) return minutes + ' 分鐘前';
+            if (hours < 24) return hours + ' 小時前';
+            if (days < 30) return days + ' 天前';
+            return new Date(timestamp).toLocaleDateString();
+        }
+        
+        function renderCardList() {
+            // Filter and sort cards
+            let filteredCards = [...cards];
+            
+            if (currentColorFilter) {
+                filteredCards = filteredCards.filter(c => c.color === currentColorFilter);
+            }
+            
+            // Sort by lastModified (newest first)
+            filteredCards.sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0));
+            
+            if (filteredCards.length === 0) {
+                cardListElem.style.display = 'none';
+                cardListEmpty.style.display = 'block';
+                cardListEmpty.textContent = currentColorFilter ? '沒有符合篩選的卡片' : '白板中沒有卡片';
+                return;
+            }
+            
+            cardListElem.style.display = 'flex';
+            cardListEmpty.style.display = 'none';
+            
+            cardListElem.innerHTML = filteredCards.map(card => \`
+                <div class="card-list-item" data-card-id="\${card.id}" draggable="true">
+                    <div class="color-dot" style="background: \${card.color || '#4b5563'}"></div>
+                    <div class="card-info">
+                        <div class="card-name">\${getFileName(card.filePath)}</div>
+                        <div class="card-time">\${formatTimeAgo(card.lastModified)}</div>
+                    </div>
+                </div>
+            \`).join('');
+            
+            // Add click listeners to navigate to card
+            cardListElem.querySelectorAll('.card-list-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const cardId = item.dataset.cardId;
+                    navigateToCard(cardId);
+                });
+                
+                // Add drag listener for stash
+                item.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', item.dataset.cardId);
+                    e.dataTransfer.effectAllowed = 'move';
+                    cardBeingDraggedToStash = item.dataset.cardId;
+                });
+                
+                item.addEventListener('dragend', () => {
+                    cardBeingDraggedToStash = null;
+                });
+            });
+        }
+        
+        function navigateToCard(cardId) {
+            const card = cards.find(c => c.id === cardId);
+            if (!card) return;
+            
+            const cardEl = document.getElementById(cardId);
+            if (!cardEl) return;
+            
+            // Calculate the center position of the card
+            const cardCenterX = card.x + (card.width || 280) / 2;
+            const cardCenterY = card.y + (card.height || 200) / 2;
+            
+            // Calculate the viewport center
+            const viewportCenterX = canvasContainer.clientWidth / 2;
+            const viewportCenterY = canvasContainer.clientHeight / 2;
+            
+            // Calculate new pan offset to center the card
+            panOffset.x = viewportCenterX - cardCenterX * zoomLevel;
+            panOffset.y = viewportCenterY - cardCenterY * zoomLevel;
+            
+            // Smooth transition
+            whiteboard.style.transition = 'transform 0.3s ease-out';
+            updateWhiteboardTransform();
+            
+            setTimeout(() => {
+                whiteboard.style.transition = '';
+            }, 300);
+            
+            // Highlight the card briefly
+            cardEl.classList.add('selected');
+            clearSelection();
+            selectedCards.add(cardId);
+        }
+        
+        // ========== Tab 3: Stash ==========
+        
+        function renderStash() {
+            if (stashCards.length === 0) {
+                stashListElem.style.display = 'none';
+                stashEmpty.style.display = 'block';
+                return;
+            }
+            
+            stashListElem.style.display = 'flex';
+            stashEmpty.style.display = 'none';
+            
+            // Sort by lastModified (newest first)
+            const sortedStash = [...stashCards].sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0));
+            
+            stashListElem.innerHTML = sortedStash.map(item => \`
+                <div class="stash-item" data-stash-id="\${item.id}">
+                    <div class="color-dot" style="background: \${item.color || '#4b5563'}"></div>
+                    <div class="stash-info">
+                        <div class="stash-name">\${getFileName(item.filePath)}</div>
+                    </div>
+                    <div class="stash-item-actions">
+                        <button class="restore" title="恢復到白板">
+                            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="1 4 1 10 7 10"></polyline>
+                                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                            </svg>
+                        </button>
+                        <button class="delete" title="永久刪除">
+                            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            \`).join('');
+            
+            // Add event listeners
+            stashListElem.querySelectorAll('.stash-item').forEach(item => {
+                const stashId = item.dataset.stashId;
+                
+                item.querySelector('.restore').addEventListener('click', () => {
+                    restoreFromStash(stashId);
+                });
+                
+                item.querySelector('.delete').addEventListener('click', () => {
+                    deleteFromStash(stashId);
+                });
+            });
+        }
+        
+        function moveCardToStash(cardId) {
+            const card = cards.find(c => c.id === cardId);
+            if (!card) return;
+            
+            // Add to stash
+            stashCards.push({
+                id: card.id,
+                filePath: card.filePath,
+                color: card.color,
+                lastModified: Date.now()
+            });
+            
+            // Remove from whiteboard
+            cards = cards.filter(c => c.id !== cardId);
+            const cardEl = document.getElementById(cardId);
+            if (cardEl) {
+                cardEl.style.transform = 'scale(0)';
+                cardEl.style.opacity = '0';
+                setTimeout(() => cardEl.remove(), 200);
+            }
+            
+            renderStash();
+            renderCardList();
+            saveState();
+        }
+        
+        function restoreFromStash(stashId) {
+            const stashItem = stashCards.find(s => s.id === stashId);
+            if (!stashItem) return;
+            
+            // Get center of viewport for placement
+            const centerPos = screenToWhiteboard(canvasContainer.clientWidth / 2, canvasContainer.clientHeight / 2);
+            
+            // Create new card
+            const newCard = {
+                id: stashItem.id,
+                x: centerPos.x - 140,
+                y: centerPos.y - 100,
+                width: 280,
+                height: 200,
+                filePath: stashItem.filePath,
+                color: stashItem.color,
+                lastModified: Date.now()
+            };
+            
+            cards.push(newCard);
+            const element = createCardElement(newCard);
+            whiteboard.appendChild(element);
+            vscode.postMessage({ command: 'readCardContent', cardId: newCard.id, filePath: newCard.filePath });
+            
+            // Remove from stash
+            stashCards = stashCards.filter(s => s.id !== stashId);
+            
+            renderStash();
+            renderCardList();
+            saveState();
+        }
+        
+        function deleteFromStash(stashId) {
+            stashCards = stashCards.filter(s => s.id !== stashId);
+            renderStash();
+            saveState();
+        }
+        
+        // Stash dropzone events
+        stashDropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            stashDropzone.classList.add('drag-over');
+        });
+        
+        stashDropzone.addEventListener('dragleave', (e) => {
+            stashDropzone.classList.remove('drag-over');
+        });
+        
+        stashDropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            stashDropzone.classList.remove('drag-over');
+            
+            const cardId = e.dataTransfer.getData('text/plain');
+            if (cardId && cards.find(c => c.id === cardId)) {
+                moveCardToStash(cardId);
+                // Switch to stash tab
+                switchTab('stash');
+            }
+        });
+        
+        // Make cards on whiteboard draggable to stash
+        function enableCardDragToStash(cardElement, card) {
+            cardElement.setAttribute('draggable', 'true');
+            
+            cardElement.addEventListener('dragstart', (e) => {
+                // Only allow drag from header
+                if (!e.target.closest('.card-header')) {
+                    e.preventDefault();
+                    return;
+                }
+                e.dataTransfer.setData('text/plain', card.id);
+                e.dataTransfer.effectAllowed = 'move';
+                cardBeingDraggedToStash = card.id;
+                cardElement.style.opacity = '0.5';
+            });
+            
+            cardElement.addEventListener('dragend', () => {
+                cardBeingDraggedToStash = null;
+                cardElement.style.opacity = '1';
+            });
+        }
+        
+        // Update card's lastModified when content changes
+        function updateCardLastModified(cardId) {
+            const card = cards.find(c => c.id === cardId);
+            if (card) {
+                card.lastModified = Date.now();
+            }
+        }
 
         // Center the whiteboard view on load
         function centerWhiteboard() {
