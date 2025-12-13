@@ -43,9 +43,11 @@ const vscode = acquireVsCodeApi();
         // ========== Save Optimization ==========
         // Debounce: delay save until user stops making changes (500ms)
         // Dirty Flag: only save if there are actual changes
+        // Version tracking: use a simple counter instead of JSON.stringify for comparison
         let saveTimeoutId = null;
         let isDirty = false;
-        let lastSavedState = null;
+        let stateVersion = 0;        // Incremented when state changes
+        let lastSavedVersion = 0;    // Track last saved version
         const SAVE_DEBOUNCE_MS = 500;
         // ========================================
 
@@ -172,11 +174,16 @@ const vscode = acquireVsCodeApi();
             textarea.placeholder = 'Type here...';
             div.appendChild(textarea);
             
-            // Events for Input
+            // Events for Input (debounced to avoid performance issues)
+            let blockSaveTimeout;
             textarea.addEventListener('input', (e) => {
                 block.text = e.target.value;
                 contentDiv.textContent = block.text; // sync content
-                saveState();
+                // Debounce saveState to avoid frequent saves during typing
+                clearTimeout(blockSaveTimeout);
+                blockSaveTimeout = setTimeout(() => {
+                    saveState();
+                }, 500);
             });
 
             textarea.addEventListener('blur', () => {
@@ -1053,6 +1060,7 @@ const vscode = acquireVsCodeApi();
          */
         function saveState() {
             isDirty = true;
+            stateVersion++;  // Increment version to track changes
             scheduleSave();
         }
 
@@ -1071,26 +1079,24 @@ const vscode = acquireVsCodeApi();
 
         /**
          * Actually perform the save if there are changes
-         * Uses dirty flag to skip unnecessary saves
+         * Uses dirty flag and version tracking to skip unnecessary saves
          */
         function performSave() {
             saveTimeoutId = null;
-            
+
             if (!isDirty) {
                 return; // No changes, skip save
             }
 
-            const currentState = JSON.stringify({ blocks, cards, pinnedFiles, stashCards });
-            
-            // Check if state actually changed (deep comparison)
-            if (lastSavedState === currentState) {
+            // Use version tracking instead of expensive JSON.stringify comparison
+            if (stateVersion === lastSavedVersion) {
                 isDirty = false;
                 return; // No actual changes, skip save
             }
 
             // Actually save
             vscode.postMessage({ command: 'saveState', state: { blocks, cards, pinnedFiles, stashCards } });
-            lastSavedState = currentState;
+            lastSavedVersion = stateVersion;
             isDirty = false;
         }
 
@@ -2501,35 +2507,38 @@ const vscode = acquireVsCodeApi();
 
         // Smooth Mouse wheel zoom and trackpad pan
         canvasContainer.addEventListener('wheel', (e) => {
-            // If the active element is a textarea (editing card), let it scroll naturally
+            // If the active element is a textarea (editing card), handle specially
             const activeElement = document.activeElement;
             if (activeElement && activeElement.tagName === 'TEXTAREA') {
                 const textarea = activeElement;
-                // Check if the textarea can scroll (has overflow)
-                const canScrollUp = textarea.scrollTop > 0;
-                const canScrollDown = textarea.scrollTop < (textarea.scrollHeight - textarea.clientHeight);
+                const editingCard = textarea.closest('.card.editing, .block.editing');
                 
-                // If scrolling down and can scroll down, or scrolling up and can scroll up
-                // Let the native scroll happen
-                if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
-                    // Don't prevent default - allow textarea to scroll
-                    e.stopPropagation();
-                    return;
-                }
-                
-                // If inside an editing card, check if mouse is over the card
-                // If so, don't pan the whiteboard - this prevents accidental panning while editing
-                const editingCard = textarea.closest('.card.editing');
                 if (editingCard) {
                     const cardRect = editingCard.getBoundingClientRect();
-                    if (e.clientX >= cardRect.left && e.clientX <= cardRect.right &&
-                        e.clientY >= cardRect.top && e.clientY <= cardRect.bottom) {
-                        // Mouse is inside editing card - don't pan unless using Ctrl/Cmd for zoom
+                    const isMouseInsideCard = e.clientX >= cardRect.left && e.clientX <= cardRect.right &&
+                                              e.clientY >= cardRect.top && e.clientY <= cardRect.bottom;
+                    
+                    if (isMouseInsideCard) {
+                        // Mouse is inside the editing card
+                        // Check if the textarea can scroll
+                        const canScrollUp = textarea.scrollTop > 0;
+                        const canScrollDown = textarea.scrollTop < (textarea.scrollHeight - textarea.clientHeight);
+                        
+                        // If scrolling and textarea can scroll in that direction, let it scroll
+                        if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
+                            e.stopPropagation();
+                            return;
+                        }
+                        
+                        // Textarea can't scroll in that direction, but mouse is still inside card
+                        // Block panning/zooming to prevent accidental operations while editing
+                        // Exception: Allow zoom with Ctrl/Cmd
                         if (!e.ctrlKey && !e.metaKey) {
                             e.preventDefault();
                             return;
                         }
                     }
+                    // Mouse is outside the editing card - fall through to normal pan/zoom handling
                 }
             }
             

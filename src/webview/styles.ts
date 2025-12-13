@@ -643,15 +643,7 @@ export const whiteboardStyles = `
             z-index: 1000;
         }
 
-        .card.external-change {
-            border-color: #f5a623;
-            animation: pulse-border 1.5s ease-in-out infinite;
-        }
-
-        @keyframes pulse-border {
-            0%, 100% { border-color: #f5a623; }
-            50% { border-color: #ffd700; box-shadow: 0 0 12px rgba(245, 166, 35, 0.5); }
-        }
+        /* external-change style removed for performance - was causing lag due to infinite animation */
 
         .card-header {
             padding: 10px 14px;
@@ -905,17 +897,15 @@ export const whiteboardStyles = `
             box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.2), 0 12px 32px rgba(0, 0, 0, 0.5);
         }
 
-        /* Editing state - also white outline for consistency */
+        /* Editing state - lightweight outline only for better panning performance */
         .block.editing {
             outline: 2px solid white;
             outline-offset: 2px;
-            box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.2), 0 12px 32px rgba(0, 0, 0, 0.5);
         }
 
         .card.editing {
             outline: 2px solid white;
             outline-offset: 2px;
-            box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.2), 0 12px 32px rgba(0, 0, 0, 0.5);
         }
 
         /* ========== Sidebar Styles (Figma-style floating panel) ========== */
