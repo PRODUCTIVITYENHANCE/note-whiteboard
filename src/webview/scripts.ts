@@ -92,7 +92,14 @@ const vscode = acquireVsCodeApi();
         // Drag optimization: cache dropzone rect to avoid repeated DOM queries
         let cachedDropzoneRect = null;
         let isOverDropzone = false;
-        // ===================================
+        
+        // ========== RAF Optimization ==========
+        // Use requestAnimationFrame for smooth DOM updates
+        let rafId = null;
+        let pendingPanUpdate = false;
+        let pendingDragUpdate = false;
+        let pendingMultiDragUpdate = false;
+        // ======================================
 
         // Colors palette - 8 deep colors for white text visibility
         const colors = [
@@ -232,18 +239,33 @@ const vscode = acquireVsCodeApi();
             document.addEventListener('mouseup', stopDrag);
         }
 
+        // Pending block drag state for RAF optimization
+        let pendingBlockDragX = 0;
+        let pendingBlockDragY = 0;
+        let pendingBlockDragUpdate = false;
+        
         function onDrag(e) {
             if (!draggedBlock) return;
             e.preventDefault(); // Prevent text selection
 
             const pos = screenToWhiteboard(e.clientX, e.clientY);
-            const x = pos.x - dragOffset.x;
-            const y = pos.y - dragOffset.y;
+            pendingBlockDragX = pos.x - dragOffset.x;
+            pendingBlockDragY = pos.y - dragOffset.y;
 
-            draggedBlock.element.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
-
-            draggedBlock.block.x = x;
-            draggedBlock.block.y = y;
+            // Update data model immediately
+            draggedBlock.block.x = pendingBlockDragX;
+            draggedBlock.block.y = pendingBlockDragY;
+            
+            // Use RAF for DOM update
+            if (!pendingBlockDragUpdate) {
+                pendingBlockDragUpdate = true;
+                requestAnimationFrame(() => {
+                    if (draggedBlock) {
+                        draggedBlock.element.style.transform = 'translate(' + pendingBlockDragX + 'px, ' + pendingBlockDragY + 'px)';
+                    }
+                    pendingBlockDragUpdate = false;
+                });
+            }
         }
 
         function stopDrag() {
@@ -841,41 +863,66 @@ const vscode = acquireVsCodeApi();
             document.addEventListener('mouseup', stopMultiDrag);
         }
 
+        // Pending multi-drag state for RAF optimization
+        let pendingMultiDragDeltaX = 0;
+        let pendingMultiDragDeltaY = 0;
+        
         function onMultiDrag(e) {
             if (!isMultiDragging) return;
             e.preventDefault();
             
             const currentPos = screenToWhiteboard(e.clientX, e.clientY);
-            const deltaX = currentPos.x - multiDragStart.x;
-            const deltaY = currentPos.y - multiDragStart.y;
+            pendingMultiDragDeltaX = currentPos.x - multiDragStart.x;
+            pendingMultiDragDeltaY = currentPos.y - multiDragStart.y;
             
-            // Move all selected blocks
+            // Update data model immediately for responsiveness
             selectedBlocks.forEach(id => {
                 const block = blocks.find(b => b.id === id);
                 const initial = initialPositions.get(id);
                 if (block && initial) {
-                    block.x = initial.x + deltaX;
-                    block.y = initial.y + deltaY;
-                    const el = document.getElementById(id);
-                    if (el) {
-                        el.style.transform = 'translate(' + block.x + 'px, ' + block.y + 'px)';
-                    }
+                    block.x = initial.x + pendingMultiDragDeltaX;
+                    block.y = initial.y + pendingMultiDragDeltaY;
                 }
             });
             
-            // Move all selected cards
             selectedCards.forEach(id => {
                 const card = cards.find(c => c.id === id);
                 const initial = initialPositions.get(id);
                 if (card && initial) {
-                    card.x = initial.x + deltaX;
-                    card.y = initial.y + deltaY;
-                    const el = document.getElementById(id);
-                    if (el) {
-                        el.style.transform = 'translate(' + card.x + 'px, ' + card.y + 'px)';
-                    }
+                    card.x = initial.x + pendingMultiDragDeltaX;
+                    card.y = initial.y + pendingMultiDragDeltaY;
                 }
             });
+            
+            // Use RAF for DOM updates - only schedule if not already pending
+            if (!pendingMultiDragUpdate) {
+                pendingMultiDragUpdate = true;
+                requestAnimationFrame(() => {
+                    // Move all selected blocks
+                    selectedBlocks.forEach(id => {
+                        const block = blocks.find(b => b.id === id);
+                        if (block) {
+                            const el = document.getElementById(id);
+                            if (el) {
+                                el.style.transform = 'translate(' + block.x + 'px, ' + block.y + 'px)';
+                            }
+                        }
+                    });
+                    
+                    // Move all selected cards
+                    selectedCards.forEach(id => {
+                        const card = cards.find(c => c.id === id);
+                        if (card) {
+                            const el = document.getElementById(id);
+                            if (el) {
+                                el.style.transform = 'translate(' + card.x + 'px, ' + card.y + 'px)';
+                            }
+                        }
+                    });
+                    
+                    pendingMultiDragUpdate = false;
+                });
+            }
             
             // Check if hovering over stash dropzone using cached rect
             if (cachedDropzoneRect) {
@@ -1278,18 +1325,32 @@ const vscode = acquireVsCodeApi();
             document.addEventListener('mouseup', stopCardDrag);
         }
 
+        // Pending drag state for RAF optimization
+        let pendingDragX = 0;
+        let pendingDragY = 0;
+        
         function onCardDrag(e) {
             if (!draggedCard) return;
             e.preventDefault();
 
             const pos = screenToWhiteboard(e.clientX, e.clientY);
-            const x = pos.x - dragOffset.x;
-            const y = pos.y - dragOffset.y;
+            pendingDragX = pos.x - dragOffset.x;
+            pendingDragY = pos.y - dragOffset.y;
 
-            draggedCard.element.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
-
-            draggedCard.card.x = x;
-            draggedCard.card.y = y;
+            // Update data model immediately for responsiveness
+            draggedCard.card.x = pendingDragX;
+            draggedCard.card.y = pendingDragY;
+            
+            // Use RAF for DOM update - only schedule if not already pending
+            if (!pendingDragUpdate) {
+                pendingDragUpdate = true;
+                requestAnimationFrame(() => {
+                    if (draggedCard) {
+                        draggedCard.element.style.transform = 'translate(' + pendingDragX + 'px, ' + pendingDragY + 'px)';
+                    }
+                    pendingDragUpdate = false;
+                });
+            }
             
             // Check if hovering over stash dropzone using cached rect
             if (cachedDropzoneRect) {
@@ -2140,7 +2201,15 @@ const vscode = acquireVsCodeApi();
             if (isPanning) {
                 panOffset.x = e.clientX - panStart.x;
                 panOffset.y = e.clientY - panStart.y;
-                updateWhiteboardTransform();
+                
+                // Use RAF for smooth panning - only schedule if not already pending
+                if (!pendingPanUpdate) {
+                    pendingPanUpdate = true;
+                    requestAnimationFrame(() => {
+                        updateWhiteboardTransform();
+                        pendingPanUpdate = false;
+                    });
+                }
             }
             
             // Update selection box if selecting
