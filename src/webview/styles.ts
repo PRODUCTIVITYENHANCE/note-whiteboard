@@ -1049,16 +1049,16 @@ export const whiteboardStyles = `
             padding: 12px;
         }
         
-        /* Tab 3: Stash - no padding so dropzone can be full size */
+        /* Tab 3: Stash - Consistent padding */
         #panelStash {
-            padding: 0;
+            padding: 12px;
             display: flex;
             flex-direction: column;
         }
         
-        /* When panel has items, add padding to content */
+        /* When panel has items, we still use the same padding */
         #panelStash.has-items {
-            padding: 0 12px 12px 12px;
+            padding: 12px;
         }
 
 
@@ -1082,26 +1082,34 @@ export const whiteboardStyles = `
         }
 
         .select-file-btn {
-            padding: 6px 14px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid #333;
-            border-radius: 6px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
             color: #ccc;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 13px;
             margin-top: 16px;
             transition: all 0.2s ease;
-            display: inline-flex;
+            display: flex;
             align-items: center;
             justify-content: center;
-            gap: 6px;
+            gap: 8px;
+            width: fit-content;
+        }
+
+        .select-file-btn svg {
+            width: 14px;
+            height: 14px;
+            stroke-width: 2.5; /* Slightly thicker for better visibility at small size */
         }
 
         .select-file-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: #555;
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.2);
             color: #fff;
             transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
         /* Pinned file viewer - full width, full height */
@@ -1351,7 +1359,7 @@ export const whiteboardStyles = `
             justify-content: center;
             border: 2px dashed rgba(255, 255, 255, 0.2);
             border-radius: 8px;
-            margin: 12px;
+            margin: 0 0 12px 0; /* Remove side margin as parent now has padding */
             text-align: center;
             color: #666;
             transition: all 0.2s ease;
