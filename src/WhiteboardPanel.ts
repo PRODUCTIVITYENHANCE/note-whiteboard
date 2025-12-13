@@ -883,16 +883,16 @@ export class WhiteboardPanel {
 
         .block {
             position: absolute;
-            width: 200px; /* Slightly wider */
-            height: 100px; /* Lower height */
-            border-radius: 18px; /* Larger border radius */
+            width: 150px;
+            height: 75px;
+            border-radius: 14px;
             cursor: move;
             user-select: none;
             transition: box-shadow 0.2s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 14px;
             text-align: center;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
@@ -920,7 +920,7 @@ export class WhiteboardPanel {
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 20px; /* Larger Font */
+            font-size: 15px;
             font-weight: 600;
             pointer-events: none; /* Allows click through to block for dragging */
             word-break: break-word;
@@ -953,15 +953,15 @@ export class WhiteboardPanel {
             height: 100%;
             background: rgba(0, 0, 0, 0.2);
             border: none;
-            border-radius: 18px;
+            border-radius: 14px;
             color: white;
-            font-size: 20px;
+            font-size: 15px;
             font-weight: 600;
             text-align: center;
             outline: none;
             resize: none;
             font-family: inherit;
-            padding: 30px 20px; /* Attempt to center verify visually */
+            padding: 22px 14px;
             display: none;
             line-height: 1.3;
         }
@@ -1160,6 +1160,122 @@ export class WhiteboardPanel {
             display: flex;
             flex-direction: column;
             max-height: 400px;
+        }
+
+        /* Folder tree styles */
+        .folder-tree {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .folder-tree-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .folder-tree-row {
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            background: #0a0a0a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #ccc;
+            transition: all 0.2s ease;
+            gap: 8px;
+        }
+
+        .folder-tree-row:hover {
+            background: #2a2a2a;
+            border-color: #555;
+            color: #fff;
+        }
+
+        .folder-tree-row.selected {
+            background: #2a2a2a;
+            border-color: #667eea;
+            color: #fff;
+        }
+
+        .folder-toggle {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        .folder-toggle svg {
+            width: 12px;
+            height: 12px;
+            stroke: #888;
+            transition: stroke 0.2s ease;
+        }
+
+        .folder-toggle:hover svg {
+            stroke: #fff;
+        }
+
+        .folder-toggle.expanded {
+            transform: rotate(90deg);
+        }
+
+        .folder-toggle.hidden {
+            visibility: hidden;
+        }
+
+        .folder-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .folder-icon svg {
+            width: 16px;
+            height: 16px;
+            stroke: #888;
+        }
+
+        .folder-tree-row:hover .folder-icon svg {
+            stroke: #f59e0b;
+        }
+
+        .folder-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .folder-children {
+            margin-left: 20px;
+            padding-left: 8px;
+            border-left: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-top: 2px;
+            overflow: hidden;
+        }
+
+        .folder-children.collapsed {
+            display: none;
+        }
+
+        /* Root folder special style */
+        .folder-tree-row.root-folder {
+            background: linear-gradient(135deg, #1a1a2e 0%, #0a0a0a 100%);
+            border-color: #444;
+        }
+
+        .folder-tree-row.root-folder:hover {
+            border-color: #667eea;
         }
 
         .new-file-item {
@@ -1679,6 +1795,8 @@ export class WhiteboardPanel {
         let moveTargetPath = null;
         let allWorkspaceFolders = [];
         let filteredFolders = [];
+        let selectedFolderIndex = -1; // -1 means nothing selected (focus on search input)
+        let flatFolderList = []; // Flattened list of visible folders for keyboard navigation
         // ========================================
 
         // Colors palette - 8 deep colors for white text visibility
@@ -1903,9 +2021,14 @@ export class WhiteboardPanel {
                     card.color = color;
                     const element = document.getElementById(contextCardId);
                     if (element) {
+                        // Apply to entire card (lighter)
+                        element.style.background = colorWithAlpha(color, 0.15);
+                        element.style.borderColor = colorWithAlpha(color, 0.4);
+                        
+                        // Apply to header (slightly more opaque)
                         const header = element.querySelector('.card-header');
                         if (header) {
-                            header.style.background = color;
+                            header.style.background = colorWithAlpha(color, 0.35);
                         }
                     }
                     saveState();
@@ -2170,19 +2293,33 @@ export class WhiteboardPanel {
             };
         }
 
-        function setZoom(level, mouseX = null, mouseY = null) {
+        function setZoom(level, mouseX = null, mouseY = null, smooth = false) {
             const oldZoom = zoomLevel;
-            zoomLevel = Math.max(0.1, Math.min(5, level)); // Wider zoom range
+            const newZoom = Math.max(0.1, Math.min(5, level)); // Wider zoom range
             
-            // If mouse position provided, zoom centered on mouse
-            if (mouseX !== null && mouseY !== null) {
-                // Calculate the point on whiteboard that mouse is pointing at
-                const pointX = (mouseX - panOffset.x) / oldZoom;
-                const pointY = (mouseY - panOffset.y) / oldZoom;
-                
-                // Adjust pan offset so that same point stays under mouse after zoom
-                panOffset.x = mouseX - pointX * zoomLevel;
-                panOffset.y = mouseY - pointY * zoomLevel;
+            // If no position provided, default to viewport center
+            if (mouseX === null || mouseY === null) {
+                mouseX = canvasContainer.clientWidth / 2;
+                mouseY = canvasContainer.clientHeight / 2;
+            }
+            
+            // Calculate the point on whiteboard that mouse is pointing at
+            const pointX = (mouseX - panOffset.x) / oldZoom;
+            const pointY = (mouseY - panOffset.y) / oldZoom;
+            
+            // Adjust pan offset so that same point stays under mouse after zoom
+            panOffset.x = mouseX - pointX * newZoom;
+            panOffset.y = mouseY - pointY * newZoom;
+            
+            zoomLevel = newZoom;
+            
+            // Apply smooth transition for button clicks
+            if (smooth) {
+                whiteboard.style.transition = 'transform 0.2s ease-out';
+                // Remove transition after animation completes
+                setTimeout(() => {
+                    whiteboard.style.transition = '';
+                }, 200);
             }
             
             updateWhiteboardTransform();
@@ -2507,6 +2644,19 @@ export class WhiteboardPanel {
             });
         }
 
+        // Helper function to convert hex color to rgba with alpha
+        function colorWithAlpha(hexColor, alpha) {
+            // Handle hex colors
+            if (hexColor && hexColor.startsWith('#')) {
+                const hex = hexColor.slice(1);
+                const r = parseInt(hex.substr(0, 2), 16);
+                const g = parseInt(hex.substr(2, 2), 16);
+                const b = parseInt(hex.substr(4, 2), 16);
+                return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + alpha + ')';
+            }
+            return hexColor;
+        }
+
         // Helper function to extract filename from path
         function getFileName(filePath) {
             if (!filePath) return 'Unknown';
@@ -2525,14 +2675,20 @@ export class WhiteboardPanel {
             if (!card.collapsed) {
                 div.style.height = (card.height || 200) + 'px';
             }
+            
+            // Apply card color to entire card background (lighter version)
+            if (card.color) {
+                div.style.background = colorWithAlpha(card.color, 0.15);
+                div.style.borderColor = colorWithAlpha(card.color, 0.4);
+            }
 
             // Header - only show filename, not full path
             const header = document.createElement('div');
             header.className = 'card-header';
             
-            // Apply card color if set
+            // Apply card color to header (slightly more opaque)
             if (card.color) {
-                header.style.background = card.color;
+                header.style.background = colorWithAlpha(card.color, 0.35);
             }
             
             // Collapse toggle triangle
@@ -2902,6 +3058,8 @@ export class WhiteboardPanel {
         function openMoveModal(cardId, filePath) {
             moveTargetCardId = cardId;
             moveTargetPath = filePath;
+            selectedFolderIndex = -1; // Reset selection
+            flatFolderList = []; // Reset folder list
             
             // Request folder list from extension
             vscode.postMessage({ command: 'getWorkspaceFolders' });
@@ -2919,18 +3077,179 @@ export class WhiteboardPanel {
             filteredFolders = [];
         }
 
+        // Build folder tree structure from flat folder paths
+        function buildFolderTree(folders) {
+            const tree = { name: '', path: '', children: {} };
+            
+            folders.forEach(folderPath => {
+                if (folderPath === '') {
+                    // Root folder - already in tree
+                    return;
+                }
+                
+                const parts = folderPath.split('/');
+                let current = tree;
+                let currentPath = '';
+                
+                parts.forEach((part, index) => {
+                    currentPath = currentPath ? currentPath + '/' + part : part;
+                    if (!current.children[part]) {
+                        current.children[part] = {
+                            name: part,
+                            path: currentPath,
+                            children: {}
+                        };
+                    }
+                    current = current.children[part];
+                });
+            });
+            
+            return tree;
+        }
+
+        // Track expanded folders state
+        const expandedFolders = new Set(['']); // Root is expanded by default
+
+        function renderFolderTree(node, container, isRoot = false) {
+            const hasChildren = Object.keys(node.children).length > 0;
+            const isExpanded = expandedFolders.has(node.path);
+            
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'folder-tree-item';
+            
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'folder-tree-row' + (isRoot ? ' root-folder' : '');
+            rowDiv.dataset.path = node.path;
+            
+            // Toggle arrow (for folders with children)
+            const toggleDiv = document.createElement('div');
+            toggleDiv.className = 'folder-toggle' + (isExpanded ? ' expanded' : '') + (!hasChildren ? ' hidden' : '');
+            toggleDiv.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+            
+            if (hasChildren) {
+                toggleDiv.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (expandedFolders.has(node.path)) {
+                        expandedFolders.delete(node.path);
+                    } else {
+                        expandedFolders.add(node.path);
+                    }
+                    renderFolderList(filteredFolders);
+                });
+            }
+            
+            // Folder icon
+            const iconDiv = document.createElement('div');
+            iconDiv.className = 'folder-icon';
+            iconDiv.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"></path></svg>';
+            
+            // Folder name
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'folder-name';
+            nameSpan.textContent = isRoot ? '/ (根目錄)' : node.name;
+            
+            rowDiv.appendChild(toggleDiv);
+            rowDiv.appendChild(iconDiv);
+            rowDiv.appendChild(nameSpan);
+            
+            // Click to select folder
+            rowDiv.addEventListener('click', () => selectFolder(node.path));
+            
+            itemDiv.appendChild(rowDiv);
+            
+            // Render children if expanded
+            if (hasChildren) {
+                const childrenDiv = document.createElement('div');
+                childrenDiv.className = 'folder-children' + (isExpanded ? '' : ' collapsed');
+                
+                // Sort children alphabetically
+                const sortedChildren = Object.values(node.children).sort((a, b) => a.name.localeCompare(b.name));
+                sortedChildren.forEach(child => {
+                    renderFolderTree(child, childrenDiv, false);
+                });
+                
+                itemDiv.appendChild(childrenDiv);
+            }
+            
+            container.appendChild(itemDiv);
+        }
+
+        // Collect visible folders in tree order for keyboard navigation
+        function collectVisibleFolders(node, result = []) {
+            result.push(node.path);
+            
+            if (expandedFolders.has(node.path)) {
+                const sortedChildren = Object.values(node.children).sort((a, b) => a.name.localeCompare(b.name));
+                sortedChildren.forEach(child => {
+                    collectVisibleFolders(child, result);
+                });
+            }
+            
+            return result;
+        }
+
         function renderFolderList(folders) {
             folderList.innerHTML = '';
-            folders.forEach((folder, index) => {
-                const item = document.createElement('div');
-                item.className = 'file-item';
-                item.innerHTML = \`
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"></path></svg>
-                    <span>\${folder === '' ? '/ (根目錄)' : folder}</span>
-                \`;
-                item.addEventListener('click', () => selectFolder(folder));
-                folderList.appendChild(item);
+            
+            // Check if we're filtering (searching)
+            const searchQuery = document.getElementById('folderSearchInput').value.trim().toLowerCase();
+            
+            if (searchQuery) {
+                // Flat list for search results
+                flatFolderList = folders.slice(); // Copy the filtered folders
+                folders.forEach((folder, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'folder-tree-row' + (index === selectedFolderIndex ? ' selected' : '');
+                    item.dataset.index = index;
+                    item.innerHTML = \`
+                        <div class="folder-toggle hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                        <div class="folder-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"></path></svg></div>
+                        <span class="folder-name">\${folder === '' ? '/ (根目錄)' : folder}</span>
+                    \`;
+                    item.addEventListener('click', () => selectFolder(folder));
+                    folderList.appendChild(item);
+                });
+            } else {
+                // Build and render tree structure
+                const tree = buildFolderTree(folders);
+                const treeContainer = document.createElement('div');
+                treeContainer.className = 'folder-tree';
+                
+                // Collect visible folders for keyboard navigation
+                flatFolderList = collectVisibleFolders(tree);
+                
+                // Render root folder first
+                renderFolderTree(tree, treeContainer, true);
+                
+                folderList.appendChild(treeContainer);
+            }
+            
+            // Update selected state
+            updateSelectedFolder();
+        }
+
+        function updateSelectedFolder() {
+            // Remove all selected states first
+            folderList.querySelectorAll('.folder-tree-row').forEach((row, i) => {
+                row.classList.remove('selected');
             });
+            
+            // Add selected state to the correct item
+            if (selectedFolderIndex >= 0 && selectedFolderIndex < flatFolderList.length) {
+                const selectedPath = flatFolderList[selectedFolderIndex];
+                const selectedRow = folderList.querySelector(\`.folder-tree-row[data-path="\${selectedPath}"]\`);
+                if (selectedRow) {
+                    selectedRow.classList.add('selected');
+                    selectedRow.scrollIntoView({ block: 'nearest' });
+                } else {
+                    // For search results mode, use index
+                    const searchRows = folderList.querySelectorAll('.folder-tree-row');
+                    if (searchRows[selectedFolderIndex]) {
+                        searchRows[selectedFolderIndex].classList.add('selected');
+                        searchRows[selectedFolderIndex].scrollIntoView({ block: 'nearest' });
+                    }
+                }
+            }
         }
 
         function filterFolders(query) {
@@ -2938,6 +3257,7 @@ export class WhiteboardPanel {
             filteredFolders = allWorkspaceFolders.filter(f => 
                 f.toLowerCase().includes(lowerQuery) || (f === '' && '根目錄'.includes(lowerQuery))
             );
+            selectedFolderIndex = -1; // Reset selection when filtering
             renderFolderList(filteredFolders);
         }
 
@@ -3201,7 +3521,34 @@ export class WhiteboardPanel {
             filterFolders(e.target.value);
         });
         document.getElementById('folderSearchInput').addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeMoveModal();
+            const totalItems = flatFolderList.length;
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (selectedFolderIndex >= totalItems - 1) {
+                    // At the end, wrap to input (-1)
+                    selectedFolderIndex = -1;
+                } else {
+                    selectedFolderIndex = selectedFolderIndex + 1;
+                }
+                updateSelectedFolder();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (selectedFolderIndex <= -1) {
+                    // At input, jump to last item (bottom)
+                    selectedFolderIndex = totalItems - 1;
+                } else {
+                    selectedFolderIndex = selectedFolderIndex - 1;
+                }
+                updateSelectedFolder();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (selectedFolderIndex >= 0 && selectedFolderIndex < totalItems) {
+                    selectFolder(flatFolderList[selectedFolderIndex]);
+                }
+            } else if (e.key === 'Escape') {
+                closeMoveModal();
+            }
         });
         document.getElementById('moveCardModal').addEventListener('click', (e) => {
             if (e.target.id === 'moveCardModal') {
@@ -3227,12 +3574,21 @@ export class WhiteboardPanel {
             }
         });
 
-        // Zoom controls
-        document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoomLevel + 0.1));
-        document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoomLevel - 0.1));
+        // Zoom controls - use viewport center and smooth animation
+        document.getElementById('zoomIn').addEventListener('click', () => {
+            setZoom(zoomLevel + 0.1, null, null, true);
+        });
+        document.getElementById('zoomOut').addEventListener('click', () => {
+            setZoom(zoomLevel - 0.1, null, null, true);
+        });
         document.getElementById('resetZoom').addEventListener('click', () => {
-            setZoom(1);
+            // Smooth transition for reset
+            whiteboard.style.transition = 'transform 0.3s ease-out';
+            setZoom(1, null, null, false);
             centerWhiteboard();
+            setTimeout(() => {
+                whiteboard.style.transition = '';
+            }, 300);
         });
 
         // Canvas panning with middle mouse button or Alt+drag
