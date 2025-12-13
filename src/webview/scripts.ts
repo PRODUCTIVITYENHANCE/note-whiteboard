@@ -584,15 +584,16 @@ const vscode = acquireVsCodeApi();
         function handleNewFileClick() {
             const query = fileSearchInput.value.trim();
             
-            if (fileSelectorMode === 'card') {
-                // Card mode: create new card
+            if (fileSelectorMode === 'card' || fileSelectorMode === 'stash') {
+                // Card or Stash mode: create new card
                 if (query) {
                     // Directly create file with the search query as filename
                     vscode.postMessage({ 
                         command: 'createNewCard', 
                         fileName: query,
                         x: pendingCardPosition.x - 150,
-                        y: pendingCardPosition.y - 100
+                        y: pendingCardPosition.y - 100,
+                        addToStash: fileSelectorMode === 'stash'
                     });
                     closeFileSelector();
                 } else {
@@ -631,6 +632,10 @@ const vscode = acquireVsCodeApi();
             if (fileSelectorMode === 'card') {
                 // Add existing file as a new card
                 addCard(filePath, pendingCardPosition.x - 150, pendingCardPosition.y - 100);
+                closeFileSelector();
+            } else if (fileSelectorMode === 'stash') {
+                // Add existing file to stash
+                addToStash(filePath);
                 closeFileSelector();
             } else if (fileSelectorMode === 'pinned') {
                 // Add file to pinned files list
@@ -1630,12 +1635,13 @@ const vscode = acquireVsCodeApi();
                     forBlockId: selectedBlockId
                 });
             } else {
-                // Creating new card on canvas
+                // Creating new card on canvas or stash
                 vscode.postMessage({ 
                     command: 'createNewCard', 
                     fileName: fileName,
                     x: pendingCardPosition.x - 150,
-                    y: pendingCardPosition.y - 100
+                    y: pendingCardPosition.y - 100,
+                    addToStash: fileSelectorMode === 'stash'
                 });
             }
             closeNewCardModal();
@@ -1991,6 +1997,8 @@ const vscode = acquireVsCodeApi();
                             if (element) element.classList.add('linked');
                             saveState();
                         }
+                    } else if (message.addToStash) {
+                        addToStash(message.filePath);
                     } else {
                         addCard(message.filePath, message.x, message.y);
                     }
@@ -2639,7 +2647,7 @@ const vscode = acquireVsCodeApi();
         
         // Stash add card button
         document.getElementById('stashAddCard').addEventListener('click', () => {
-            openFileSelector(null, 'card');
+            openFileSelector(null, 'stash');
         });
         
         // ========== Tab 1: Pinned Files ==========
@@ -2973,6 +2981,28 @@ const vscode = acquireVsCodeApi();
             
             renderStash();
             renderCardList();
+            saveState();
+            renderStash();
+            renderCardList();
+            saveState();
+        }
+
+        function addToStash(filePath) {
+            const id = 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            stashCards.push({
+                id: id,
+                filePath: filePath,
+                color: null, // default
+                lastModified: Date.now()
+                // No original position data for new cards
+            });
+            
+            // Switch to stash tab if not already active (e.g. if adding from file selector)
+            if (!panelStash.classList.contains('active')) {
+                switchTab('stash');
+            }
+            
+            renderStash();
             saveState();
         }
         

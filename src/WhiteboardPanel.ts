@@ -113,7 +113,7 @@ export class WhiteboardPanel {
                         await this._saveCardContent(message.filePath, message.content);
                         break;
                     case 'createNewCard':
-                        await this._createNewCard(message.fileName, message.x, message.y, message.forBlockId);
+                        await this._createNewCard(message.fileName, message.x, message.y, message.forBlockId, message.addToStash);
                         break;
                     case 'getCardFolderPath':
                         const folderPath = this._getCardFolderPath();
@@ -477,7 +477,7 @@ export class WhiteboardPanel {
         return config.get('cardFolderPath', '');
     }
 
-    private async _createNewCard(fileName: string, x: number, y: number, forBlockId?: string) {
+    private async _createNewCard(fileName: string, x: number, y: number, forBlockId?: string, addToStash?: boolean) {
         try {
             const workspaceFolders = vscode.workspace.workspaceFolders;
             if (!workspaceFolders) {
@@ -525,7 +525,8 @@ export class WhiteboardPanel {
                 filePath: relativePath,
                 x: x,
                 y: y,
-                forBlockId: forBlockId
+                forBlockId: forBlockId,
+                addToStash: addToStash
             });
 
         } catch (error) {
