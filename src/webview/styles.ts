@@ -683,16 +683,37 @@ export const whiteboardStyles = `
             background: #555;
         }
 
+        /* Card resize handles - 8 directions */
         .card-resize-handle {
             position: absolute;
-            right: 0;
-            bottom: 0;
-            width: 20px;
-            height: 20px;
-            cursor: se-resize;
-            background: linear-gradient(135deg, transparent 50%, #444 50%);
-            border-radius: 0 0 12px 0;
+            background: transparent;
+            z-index: 10;
         }
+
+        /* Corner handles */
+        .card-resize-handle.nw { top: -4px; left: -4px; width: 12px; height: 12px; cursor: nw-resize; }
+        .card-resize-handle.ne { top: -4px; right: -4px; width: 12px; height: 12px; cursor: ne-resize; }
+        .card-resize-handle.sw { bottom: -4px; left: -4px; width: 12px; height: 12px; cursor: sw-resize; }
+        .card-resize-handle.se { bottom: -4px; right: -4px; width: 12px; height: 12px; cursor: se-resize; }
+
+        /* Edge handles */
+        .card-resize-handle.n { top: -4px; left: 12px; right: 12px; height: 8px; cursor: n-resize; }
+        .card-resize-handle.s { bottom: -4px; left: 12px; right: 12px; height: 8px; cursor: s-resize; }
+        .card-resize-handle.w { left: -4px; top: 12px; bottom: 12px; width: 8px; cursor: w-resize; }
+        .card-resize-handle.e { right: -4px; top: 12px; bottom: 12px; width: 8px; cursor: e-resize; }
+
+        /* Visual indicator on hover/resize */
+        .card:hover .card-resize-handle.se::after {
+            content: '';
+            position: absolute;
+            right: 2px;
+            bottom: 2px;
+            width: 8px;
+            height: 8px;
+            background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.3) 50%);
+            border-radius: 0 0 8px 0;
+        }
+
 
         /* Collapse toggle button */
         .card-collapse-toggle {
@@ -1116,8 +1137,9 @@ export const whiteboardStyles = `
         .card-list-controls {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
             margin-bottom: 12px;
+            flex-shrink: 0;
         }
 
         .color-filter-label {
@@ -1125,30 +1147,46 @@ export const whiteboardStyles = `
             color: #888;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            margin-bottom: 4px;
         }
 
-        /* Color swatch grid filter */
+        /* Color swatch horizontal scroll */
         .color-filter-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            display: flex;
             gap: 6px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 4px 0;
+            scrollbar-width: thin;
+            scrollbar-color: #444 transparent;
+        }
+
+        .color-filter-grid::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .color-filter-grid::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .color-filter-grid::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 2px;
         }
 
         .color-filter-option {
-            width: 100%;
-            aspect-ratio: 1;
-            border-radius: 8px;
+            width: 28px;
+            height: 28px;
+            min-width: 28px;
+            border-radius: 6px;
             cursor: pointer;
             border: 2px solid transparent;
-            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-            position: relative;
+            transition: all 0.15s ease;
+            flex-shrink: 0;
         }
 
         .color-filter-option:hover {
             transform: scale(1.1);
-            border-color: rgba(255, 255, 255, 0.3);
-            z-index: 1;
+            border-color: rgba(255, 255, 255, 0.4);
         }
 
         .color-filter-option.active {
@@ -1159,6 +1197,7 @@ export const whiteboardStyles = `
         .color-filter-option.all-colors {
             background: linear-gradient(135deg, #2563eb 0%, #dc2626 25%, #ea580c 50%, #16a34a 75%, #7c3aed 100%);
         }
+
 
         .card-list {
             display: flex;

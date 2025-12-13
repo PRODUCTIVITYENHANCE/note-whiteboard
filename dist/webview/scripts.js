@@ -1098,10 +1098,19 @@ const vscode = acquireVsCodeApi();
             content.appendChild(disconnectedContainer);
             div.appendChild(content);
 
-            // Resize handle
-            const resizeHandle = document.createElement('div');
-            resizeHandle.className = 'card-resize-handle';
-            div.appendChild(resizeHandle);
+            // Resize handles - 8 directions (4 corners + 4 edges)
+            const resizeDirections = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'];
+            resizeDirections.forEach(direction => {
+                const handle = document.createElement('div');
+                handle.className = 'card-resize-handle ' + direction;
+                handle.dataset.direction = direction;
+                handle.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    startCardResize(e, div, card, direction);
+                });
+                div.appendChild(handle);
+            });
+
 
             // Collapse toggle click handler
             collapseToggle.addEventListener('click', (e) => {
@@ -1143,11 +1152,7 @@ const vscode = acquireVsCodeApi();
                 }
             });
 
-            // Resize
-            resizeHandle.addEventListener('mousedown', (e) => {
-                e.stopPropagation();
-                startCardResize(e, div, card);
-            });
+            // (Resize handlers are now attached during handle creation above)
 
             // Save content on change (debounced)
             let saveTimeout;
@@ -1226,10 +1231,31 @@ const vscode = acquireVsCodeApi();
             document.removeEventListener('mouseup', stopCardDrag);
         }
 
-        function startCardResize(e, element, card) {
-            resizingCard = { element, card, startX: e.clientX, startY: e.clientY, startW: element.offsetWidth, startH: element.offsetHeight };
+        function startCardResize(e, element, card, direction) {
+            resizingCard = { 
+                element, 
+                card, 
+                direction,
+                startX: e.clientX, 
+                startY: e.clientY, 
+                startW: element.offsetWidth, 
+                startH: element.offsetHeight,
+                startLeft: card.x,
+                startTop: card.y
+            };
+            document.body.style.cursor = getCursorForDirection(direction);
+            document.body.style.userSelect = 'none';
             document.addEventListener('mousemove', onCardResize);
             document.addEventListener('mouseup', stopCardResize);
+        }
+
+        function getCursorForDirection(direction) {
+            const cursors = {
+                'nw': 'nw-resize', 'n': 'n-resize', 'ne': 'ne-resize',
+                'w': 'w-resize', 'e': 'e-resize',
+                'sw': 'sw-resize', 's': 's-resize', 'se': 'se-resize'
+            };
+            return cursors[direction] || 'se-resize';
         }
 
         function onCardResize(e) {
@@ -1238,14 +1264,48 @@ const vscode = acquireVsCodeApi();
             
             const dx = (e.clientX - resizingCard.startX) / zoomLevel;
             const dy = (e.clientY - resizingCard.startY) / zoomLevel;
+            const dir = resizingCard.direction;
             
-            const newW = Math.max(250, resizingCard.startW + dx);
-            const newH = Math.max(150, resizingCard.startH + dy);
+            let newW = resizingCard.startW;
+            let newH = resizingCard.startH;
+            let newX = resizingCard.startLeft;
+            let newY = resizingCard.startTop;
             
+            const MIN_W = 200;
+            const MIN_H = 100;
+            
+            // Handle horizontal resizing
+            if (dir.includes('e')) {
+                // Resize from right edge
+                newW = Math.max(MIN_W, resizingCard.startW + dx);
+            } else if (dir.includes('w')) {
+                // Resize from left edge - also adjust X position
+                const widthChange = Math.min(dx, resizingCard.startW - MIN_W);
+                newW = Math.max(MIN_W, resizingCard.startW - dx);
+                newX = resizingCard.startLeft + (resizingCard.startW - newW);
+            }
+            
+            // Handle vertical resizing
+            if (dir.includes('s')) {
+                // Resize from bottom edge
+                newH = Math.max(MIN_H, resizingCard.startH + dy);
+            } else if (dir.includes('n')) {
+                // Resize from top edge - also adjust Y position
+                const heightChange = Math.min(dy, resizingCard.startH - MIN_H);
+                newH = Math.max(MIN_H, resizingCard.startH - dy);
+                newY = resizingCard.startTop + (resizingCard.startH - newH);
+            }
+            
+            // Apply changes
             resizingCard.element.style.width = newW + 'px';
             resizingCard.element.style.height = newH + 'px';
+            resizingCard.element.style.left = newX + 'px';
+            resizingCard.element.style.top = newY + 'px';
+            
             resizingCard.card.width = newW;
             resizingCard.card.height = newH;
+            resizingCard.card.x = newX;
+            resizingCard.card.y = newY;
         }
 
         function stopCardResize() {
@@ -1253,9 +1313,12 @@ const vscode = acquireVsCodeApi();
                 resizingCard = null;
                 saveState();
             }
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
             document.removeEventListener('mousemove', onCardResize);
             document.removeEventListener('mouseup', stopCardResize);
         }
+
 
         function addCard(filePath, x, y) {
             const card = {
