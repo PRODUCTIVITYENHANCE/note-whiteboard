@@ -923,7 +923,7 @@ export const whiteboardStyles = `
             left: 16px;
             top: 16px;
             width: 260px;
-            height: 60vh;
+            height: calc(100vh - 32px);
             min-height: 400px;
             max-height: calc(100vh - 32px);
             background: rgba(26, 26, 26, 0.95);
