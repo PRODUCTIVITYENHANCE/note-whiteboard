@@ -2,6 +2,7 @@
 
 一款極簡風格的 VS Code 擴充套件，專為視覺化筆記設計——靈感來自 Heptabase 與 Obsidian Canvas。
 可以用在任何以 VSCode 為基底的開發軟體（Cursor、Antigravity等等）
+本插件完全由 AI 開發，若有 Bug 歡迎回報
 
 ##  功能特色
 
