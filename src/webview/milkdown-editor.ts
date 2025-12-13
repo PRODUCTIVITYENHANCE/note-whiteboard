@@ -113,6 +113,27 @@ export class MilkdownEditorManager {
         this.editors.set(cardId, milkdownEditor);
         console.log(`[Milkdown] Editor created for card: ${cardId}`);
 
+        // Add focus/blur listeners to manage 'editing' class on parent card
+        try {
+            const view = editor.ctx.get(editorViewCtx);
+            const editorDom = view.dom;
+
+            // Find the parent card element
+            const cardElement = container.closest('.card');
+
+            if (cardElement && editorDom) {
+                editorDom.addEventListener('focus', () => {
+                    cardElement.classList.add('editing');
+                });
+
+                editorDom.addEventListener('blur', () => {
+                    cardElement.classList.remove('editing');
+                });
+            }
+        } catch (error) {
+            console.error(`[Milkdown] Error setting up focus/blur listeners for card ${cardId}:`, error);
+        }
+
         return milkdownEditor;
     }
 

@@ -1557,9 +1557,14 @@ export const whiteboardStyles = `
         .milkdown-editor-wrapper {
             width: 100%;
             height: 100%;
-            overflow-y: auto;
+            overflow-y: hidden;
             overflow-x: hidden;
             background: transparent;
+        }
+
+        /* Only enable scrolling when card is being edited */
+        .card.editing .milkdown-editor-wrapper {
+            overflow-y: auto;
         }
         
         /* Scrollbar for milkdown wrapper */
@@ -1584,8 +1589,13 @@ export const whiteboardStyles = `
         .milkdown-container {
             width: 100%;
             height: 100%;
-            overflow-y: auto;
+            overflow-y: hidden;
             background: transparent;
+        }
+
+        /* Only enable scrolling when card is being edited */
+        .card.editing .milkdown-container {
+            overflow-y: auto;
         }
 
         /* Milkdown editor root */
