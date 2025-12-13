@@ -2916,19 +2916,24 @@ const vscode = acquireVsCodeApi();
                 scrollStartedInEditingCard = false;
                 
                 if (targetCard) {
-                    // Check if this card is being edited with Milkdown
-                    if (targetCard.classList.contains('using-milkdown')) {
-                        const milkdownWrapper = targetCard.querySelector('.milkdown-editor-wrapper');
-                        if (milkdownWrapper && milkdownWrapper.scrollHeight > milkdownWrapper.clientHeight) {
-                            scrollStartedInEditingCard = true;
+                    // Check if this card is ACTUALLY being edited (must have 'editing' class)
+                    const isActuallyEditing = targetCard.classList.contains('editing');
+
+                    if (isActuallyEditing) {
+                        // Check if this card is being edited with Milkdown
+                        if (targetCard.classList.contains('using-milkdown')) {
+                            const milkdownWrapper = targetCard.querySelector('.milkdown-editor-wrapper');
+                            if (milkdownWrapper && milkdownWrapper.scrollHeight > milkdownWrapper.clientHeight) {
+                                scrollStartedInEditingCard = true;
+                            }
                         }
-                    }
-                    // Check textarea fallback
-                    const activeElement = document.activeElement;
-                    if (activeElement && activeElement.tagName === 'TEXTAREA') {
-                        const editingCard = activeElement.closest('.card.editing, .block.editing');
-                        if (editingCard === targetCard && activeElement.scrollHeight > activeElement.clientHeight) {
-                            scrollStartedInEditingCard = true;
+                        // Check textarea fallback
+                        const activeElement = document.activeElement;
+                        if (activeElement && activeElement.tagName === 'TEXTAREA') {
+                            const editingCard = activeElement.closest('.card.editing, .block.editing');
+                            if (editingCard === targetCard && activeElement.scrollHeight > activeElement.clientHeight) {
+                                scrollStartedInEditingCard = true;
+                            }
                         }
                     }
                 }
