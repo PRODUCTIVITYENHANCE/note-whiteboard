@@ -1,5 +1,16 @@
 # Change Log
 
+## [1.4.1] - 2024-12-13
+### Refactored - 程式碼模組化
+- **拆分 WhiteboardPanel.ts**: 將原本 ~5000 行的單一檔案拆分為多個模組：
+  - `src/types.ts` (~40 行): 介面定義（Block, Card, StashCard, WhiteboardState）
+  - `src/webview/styles.ts` (~1270 行): CSS 樣式
+  - `src/webview/template.ts` (~200 行): HTML 模板結構
+  - `src/webview/scripts.ts` (~2640 行): 前端 JavaScript 邏輯
+  - `src/WhiteboardPanel.ts` (~825 行): 後端類別邏輯
+- **打包流程不變**: 仍使用 `tsc` 編譯，無需 webpack/esbuild
+- **更易維護**: 每個檔案職責單一，便於定位和修改
+
 ## [1.4.0] - 2024-12-13
 ### Added - 側邊欄功能
 - **可收合側邊欄**: 工具列最左側新增側邊欄切換按鈕，點擊可展開/收合 320px 寬的側邊欄。
