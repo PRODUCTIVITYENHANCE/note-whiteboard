@@ -1553,8 +1553,8 @@ const vscode = acquireVsCodeApi();
                 id: 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                 x: x,
                 y: y,
-                width: 300,
-                height: 200,
+                width: 450,
+                height: 300,
                 filePath: filePath,
                 lastModified: Date.now() // Add timestamp for proper sorting in list
             };
@@ -2082,6 +2082,33 @@ const vscode = acquireVsCodeApi();
                         pinnedTextarea.value = message.content;
                     }
                     break;
+                case 'stashCardFileRenamed':
+                    // Stash card's linked file was renamed - update the stash card
+                    const renamedStashCard = stashCards.find(s => s.id === message.stashCardId);
+                    if (renamedStashCard) {
+                        renamedStashCard.filePath = message.newPath;
+                        // Re-render stash list to update UI
+                        renderStash();
+                        saveState();
+                    }
+                    break;
+                case 'pinnedFileRenamed':
+                    // Pinned file was renamed - update the pinned files list
+                    const pinnedIndex = pinnedFiles.findIndex(f => {
+                        const workspaceFolders = message.oldPath;
+                        return f === message.oldPath;
+                    });
+                    if (pinnedIndex !== -1) {
+                        pinnedFiles[pinnedIndex] = message.newPath;
+                        // Update currentPinnedFile if it was the renamed one
+                        if (currentPinnedFile === message.oldPath) {
+                            currentPinnedFile = message.newPath;
+                        }
+                        // Re-render pinned files to update UI
+                        renderPinnedFiles();
+                        saveState();
+                    }
+                    break;
             }
         });
 
@@ -2124,6 +2151,33 @@ const vscode = acquireVsCodeApi();
             const card = cards.find(c => c.id === contextCardId);
             if (card) {
                 openMoveModal(card.id, card.filePath);
+            }
+            hideContextMenu();
+        });
+
+        document.getElementById('fitContentMenu').addEventListener('click', () => {
+            if (!contextCardId) return;
+            const card = cards.find(c => c.id === contextCardId);
+            const cardElement = document.getElementById(contextCardId);
+            if (card && cardElement) {
+                const textarea = cardElement.querySelector('textarea');
+                if (textarea) {
+                    // Get the header height (typically ~32px)
+                    const header = cardElement.querySelector('.card-header');
+                    const headerHeight = header ? header.offsetHeight : 32;
+                    
+                    // Calculate the new height based on text content
+                    // Add padding for better visual appearance
+                    const padding = 16; // some bottom padding
+                    const newHeight = textarea.scrollHeight + headerHeight + padding;
+                    
+                    // Apply the new height (minimum 100px to avoid too small cards)
+                    const finalHeight = Math.max(100, newHeight);
+                    card.height = finalHeight;
+                    cardElement.style.height = finalHeight + 'px';
+                    
+                    saveState();
+                }
             }
             hideContextMenu();
         });

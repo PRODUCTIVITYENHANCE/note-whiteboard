@@ -234,6 +234,52 @@ export class WhiteboardPanel {
                         });
                     }
                 }
+
+                // Update Stash Cards
+                if (state.stashCards) {
+                    for (const stashCard of state.stashCards) {
+                        const stashCardFullPath = path.isAbsolute(stashCard.filePath)
+                            ? stashCard.filePath
+                            : path.join(workspaceRoot, stashCard.filePath);
+
+                        if (stashCardFullPath === oldFullPath) {
+                            // Update to new path (use relative if original was relative)
+                            stashCard.filePath = path.isAbsolute(stashCard.filePath) ? newFullPath : newRelativePath;
+                            stateChanged = true;
+
+                            // Notify webview about the rename
+                            this._panel.webview.postMessage({
+                                command: 'stashCardFileRenamed',
+                                stashCardId: stashCard.id,
+                                oldPath: oldRelativePath,
+                                newPath: newRelativePath
+                            });
+                        }
+                    }
+                }
+
+                // Update Pinned Files
+                if (state.pinnedFiles) {
+                    for (let i = 0; i < state.pinnedFiles.length; i++) {
+                        const pinnedFile = state.pinnedFiles[i];
+                        const pinnedFullPath = path.isAbsolute(pinnedFile)
+                            ? pinnedFile
+                            : path.join(workspaceRoot, pinnedFile);
+
+                        if (pinnedFullPath === oldFullPath) {
+                            // Update to new path (use relative if original was relative)
+                            state.pinnedFiles[i] = path.isAbsolute(pinnedFile) ? newFullPath : newRelativePath;
+                            stateChanged = true;
+
+                            // Notify webview about the rename
+                            this._panel.webview.postMessage({
+                                command: 'pinnedFileRenamed',
+                                oldPath: oldRelativePath,
+                                newPath: newRelativePath
+                            });
+                        }
+                    }
+                }
             }
 
             // Save updated state
