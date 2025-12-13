@@ -1030,13 +1030,18 @@ export const whiteboardStyles = `
 
         .sidebar-content {
             flex: 1;
-            overflow-y: auto;
+            overflow: hidden;
             padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
 
         .sidebar-panel {
             display: none;
-            height: 100%;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
         }
 
         .sidebar-panel.active {
@@ -1044,21 +1049,39 @@ export const whiteboardStyles = `
             flex-direction: column;
         }
 
+        /* Tab 1: Pinned Files panel */
+        #panelPinned {
+            overflow: hidden;
+        }
+
+        #pinnedFileViewer {
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            flex-direction: column;
+        }
+
+        #pinnedFileViewer.visible {
+            display: flex;
+        }
+
         /* Tab 2 needs padding */
         #panelCards {
             padding: 12px;
+            overflow-y: auto;
         }
         
         /* Tab 3: Stash - Consistent padding */
         #panelStash {
             padding: 12px;
-            display: flex;
-            flex-direction: column;
+            overflow-y: auto;
+            transition: background 0.2s ease, border-color 0.2s ease;
         }
-        
-        /* When panel has items, we still use the same padding */
-        #panelStash.has-items {
-            padding: 12px;
+
+        #panelStash.drag-over {
+            background: rgba(102, 126, 234, 0.1);
+            outline: 2px dashed #667eea;
+            outline-offset: -2px;
         }
 
 
@@ -1169,13 +1192,16 @@ export const whiteboardStyles = `
         .pinned-file-content {
             flex: 1;
             padding: 0;
-            overflow-y: auto;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
 
         .pinned-file-textarea {
             width: 100%;
-            height: 100%;
-            min-height: 100%;
+            flex: 1;
+            min-height: 0;
             background: transparent;
             border: none;
             color: #ccc;
@@ -1186,6 +1212,7 @@ export const whiteboardStyles = `
             outline: none;
             padding: 12px;
             box-sizing: border-box;
+            overflow-y: auto;
         }
 
 

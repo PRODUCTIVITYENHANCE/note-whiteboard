@@ -887,9 +887,9 @@ const vscode = acquireVsCodeApi();
             isMultiDragging = true;
             multiDragStart = screenToWhiteboard(e.clientX, e.clientY);
             
-            // Cache dropzone position at drag start to avoid repeated DOM queries
-            if (sidebarOpen && selectedCards.size > 0) {
-                cachedDropzoneRect = stashDropzone.getBoundingClientRect();
+            // Cache stash panel position at drag start to avoid repeated DOM queries
+            if (sidebarOpen && selectedCards.size > 0 && panelStash.classList.contains('active')) {
+                cachedDropzoneRect = panelStash.getBoundingClientRect();
             } else {
                 cachedDropzoneRect = null;
             }
@@ -975,7 +975,7 @@ const vscode = acquireVsCodeApi();
                 });
             }
             
-            // Check if hovering over stash dropzone using cached rect
+            // Check if hovering over stash panel using cached rect
             if (cachedDropzoneRect) {
                 const nowOver = e.clientX >= cachedDropzoneRect.left && e.clientX <= cachedDropzoneRect.right &&
                                e.clientY >= cachedDropzoneRect.top && e.clientY <= cachedDropzoneRect.bottom;
@@ -983,9 +983,9 @@ const vscode = acquireVsCodeApi();
                 if (nowOver !== isOverDropzone) {
                     isOverDropzone = nowOver;
                     if (nowOver) {
-                        stashDropzone.classList.add('drag-over');
+                        panelStash.classList.add('drag-over');
                     } else {
-                        stashDropzone.classList.remove('drag-over');
+                        panelStash.classList.remove('drag-over');
                     }
                 }
             }
@@ -994,12 +994,12 @@ const vscode = acquireVsCodeApi();
         function stopMultiDrag(e) {
             if (isMultiDragging) {
                 isMultiDragging = false;
-                
-                // Check if dropped on stash dropzone
-                if (sidebarOpen && selectedCards.size > 0) {
-                    const dropzoneRect = stashDropzone.getBoundingClientRect();
-                    if (e.clientX >= dropzoneRect.left && e.clientX <= dropzoneRect.right &&
-                        e.clientY >= dropzoneRect.top && e.clientY <= dropzoneRect.bottom) {
+
+                // Check if dropped on stash panel
+                if (sidebarOpen && selectedCards.size > 0 && panelStash.classList.contains('active')) {
+                    const panelRect = panelStash.getBoundingClientRect();
+                    if (e.clientX >= panelRect.left && e.clientX <= panelRect.right &&
+                        e.clientY >= panelRect.top && e.clientY <= panelRect.bottom) {
                         // Move all selected cards to stash
                         // First restore original positions (since they were just visual during drag)
                         selectedCards.forEach(id => {
@@ -1010,25 +1010,24 @@ const vscode = acquireVsCodeApi();
                                 card.y = initial.y;
                             }
                         });
-                        
+
                         // Then move to stash
                         const cardsToStash = [...selectedCards];
                         cardsToStash.forEach(cardId => {
                             moveCardToStash(cardId);
                         });
-                        
-                        // Clear selection and switch to stash tab
+
+                        // Clear selection
                         selectedCards.clear();
-                        switchTab('stash');
-                        stashDropzone.classList.remove('drag-over');
+                        panelStash.classList.remove('drag-over');
                         initialPositions.clear();
                         document.removeEventListener('mousemove', onMultiDrag);
                         document.removeEventListener('mouseup', stopMultiDrag);
                         return;
                     }
                 }
-                
-                stashDropzone.classList.remove('drag-over');
+
+                panelStash.classList.remove('drag-over');
                 initialPositions.clear();
                 saveState();
             }
@@ -1358,9 +1357,9 @@ const vscode = acquireVsCodeApi();
             topZIndex++;
             element.style.zIndex = topZIndex;
             
-            // Cache dropzone position at drag start to avoid repeated DOM queries
-            if (sidebarOpen) {
-                cachedDropzoneRect = stashDropzone.getBoundingClientRect();
+            // Cache stash panel position at drag start to avoid repeated DOM queries
+            if (sidebarOpen && panelStash.classList.contains('active')) {
+                cachedDropzoneRect = panelStash.getBoundingClientRect();
             } else {
                 cachedDropzoneRect = null;
             }
@@ -1403,7 +1402,7 @@ const vscode = acquireVsCodeApi();
                 });
             }
             
-            // Check if hovering over stash dropzone using cached rect
+            // Check if hovering over stash panel using cached rect
             if (cachedDropzoneRect) {
                 const nowOver = e.clientX >= cachedDropzoneRect.left && e.clientX <= cachedDropzoneRect.right &&
                                e.clientY >= cachedDropzoneRect.top && e.clientY <= cachedDropzoneRect.bottom;
@@ -1411,9 +1410,9 @@ const vscode = acquireVsCodeApi();
                 if (nowOver !== isOverDropzone) {
                     isOverDropzone = nowOver;
                     if (nowOver) {
-                        stashDropzone.classList.add('drag-over');
+                        panelStash.classList.add('drag-over');
                     } else {
-                        stashDropzone.classList.remove('drag-over');
+                        panelStash.classList.remove('drag-over');
                     }
                 }
             }
@@ -1421,27 +1420,28 @@ const vscode = acquireVsCodeApi();
 
         function stopCardDrag(e) {
             if (draggedCard) {
-                // Check if dropped on stash dropzone
-                if (sidebarOpen) {
-                    const dropzoneRect = stashDropzone.getBoundingClientRect();
-                    if (e.clientX >= dropzoneRect.left && e.clientX <= dropzoneRect.right &&
-                        e.clientY >= dropzoneRect.top && e.clientY <= dropzoneRect.bottom) {
+                // Check if dropped on stash panel (either dropzone or list area)
+                if (sidebarOpen && panelStash.classList.contains('active')) {
+                    const panelRect = panelStash.getBoundingClientRect();
+                    if (e.clientX >= panelRect.left && e.clientX <= panelRect.right &&
+                        e.clientY >= panelRect.top && e.clientY <= panelRect.bottom) {
                         // Move card to stash instead of just repositioning
                         const cardId = draggedCard.card.id;
                         draggedCard.element.classList.remove('dragging');
                         stashDropzone.classList.remove('drag-over');
+                        panelStash.classList.remove('drag-over');
                         draggedCard = null;
-                        
+
                         moveCardToStash(cardId);
-                        switchTab('stash');
-                        
+
                         document.removeEventListener('mousemove', onCardDrag);
                         document.removeEventListener('mouseup', stopCardDrag);
                         return;
                     }
                 }
-                
+
                 stashDropzone.classList.remove('drag-over');
+                panelStash.classList.remove('drag-over');
                 draggedCard.element.classList.remove('dragging');
                 draggedCard = null;
                 saveState();
@@ -2656,14 +2656,14 @@ const vscode = acquireVsCodeApi();
         function renderPinnedFiles() {
             if (pinnedFiles.length === 0) {
                 pinnedEmpty.style.display = 'flex';
-                pinnedFileViewer.style.display = 'none';
+                pinnedFileViewer.classList.remove('visible');
                 pinnedFileViewer.innerHTML = '';
                 currentPinnedFile = null;
                 return;
             }
-            
+
             pinnedEmpty.style.display = 'none';
-            pinnedFileViewer.style.display = 'block';
+            pinnedFileViewer.classList.add('visible');
             
             // For now, show the first pinned file
             if (!currentPinnedFile || !pinnedFiles.includes(currentPinnedFile)) {
@@ -2989,6 +2989,16 @@ const vscode = acquireVsCodeApi();
         }
 
         function addToStash(filePath) {
+            // Check if this file is already in stash
+            const alreadyInStash = stashCards.some(card => card.filePath === filePath);
+            if (alreadyInStash) {
+                // Switch to stash tab to show the existing card
+                if (!panelStash.classList.contains('active')) {
+                    switchTab('stash');
+                }
+                return; // Don't add duplicate
+            }
+
             const id = 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             stashCards.push({
                 id: id,
@@ -2997,12 +3007,12 @@ const vscode = acquireVsCodeApi();
                 lastModified: Date.now()
                 // No original position data for new cards
             });
-            
+
             // Switch to stash tab if not already active (e.g. if adding from file selector)
             if (!panelStash.classList.contains('active')) {
                 switchTab('stash');
             }
-            
+
             renderStash();
             saveState();
         }
