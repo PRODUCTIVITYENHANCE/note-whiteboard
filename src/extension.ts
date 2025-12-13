@@ -6,9 +6,39 @@ import { WhiteboardPanel } from './WhiteboardPanel';
 export function activate(context: vscode.ExtensionContext) {
     console.log('Whiteboard Canvas extension is now active!');
 
-    // Register the command to open whiteboard (legacy - uses workspaceState)
-    const openCommand = vscode.commands.registerCommand('whiteboard.open', () => {
-        WhiteboardPanel.createOrShow(context);
+    // Register the command to open whiteboard - smart open logic
+    const openCommand = vscode.commands.registerCommand('whiteboard.open', async () => {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders) {
+            vscode.window.showErrorMessage('Please open a workspace first');
+            return;
+        }
+
+        // Find all .whiteboard.json files in workspace
+        const whiteboardFiles = await vscode.workspace.findFiles('**/*.whiteboard.json', '**/node_modules/**');
+
+        if (whiteboardFiles.length === 0) {
+            // No whiteboard exists - create new one
+            await vscode.commands.executeCommand('whiteboard.createNew');
+        } else if (whiteboardFiles.length === 1) {
+            // Only one whiteboard - open it directly
+            await vscode.commands.executeCommand('vscode.openWith', whiteboardFiles[0], 'whiteboard.editor');
+        } else {
+            // Multiple whiteboards - let user choose
+            const items = whiteboardFiles.map(uri => ({
+                label: path.basename(uri.fsPath, '.whiteboard.json'),
+                description: vscode.workspace.asRelativePath(uri),
+                uri: uri
+            }));
+
+            const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: 'Select a whiteboard to open'
+            });
+
+            if (selected) {
+                await vscode.commands.executeCommand('vscode.openWith', selected.uri, 'whiteboard.editor');
+            }
+        }
     });
 
     // Register command to create new whiteboard file

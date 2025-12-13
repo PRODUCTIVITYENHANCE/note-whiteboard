@@ -674,7 +674,7 @@ export const whiteboardStyles = `
 
         .card-content {
             flex: 1;
-            padding: 12px;
+            padding: 0;
             overflow: auto;
         }
 
@@ -690,6 +690,7 @@ export const whiteboardStyles = `
             outline: none;
             font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
             overflow-y: auto;
+            padding: 12px;
         }
 
         /* Custom scrollbar for card textarea */
@@ -944,23 +945,79 @@ export const whiteboardStyles = `
             transform: translateX(0);
         }
 
-        /* Sidebar resize handle */
+        /* Sidebar resize handle - right edge (width) */
         .sidebar-resize-handle {
             position: absolute;
             right: 0;
             top: 0;
             width: 6px;
-            height: 100%;
+            height: calc(100% - 12px);
             cursor: ew-resize;
             background: transparent;
             transition: background 0.2s ease;
             z-index: 10;
-            border-radius: 0 16px 16px 0;
+            border-radius: 0 16px 0 0;
         }
 
         .sidebar-resize-handle:hover,
         .sidebar-resize-handle.resizing {
             background: rgba(102, 126, 234, 0.5);
+        }
+
+        /* Sidebar resize handle - bottom edge (height) */
+        .sidebar-resize-handle-bottom {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: calc(100% - 12px);
+            height: 6px;
+            cursor: ns-resize;
+            background: transparent;
+            transition: background 0.2s ease;
+            z-index: 10;
+            border-radius: 0 0 0 16px;
+        }
+
+        .sidebar-resize-handle-bottom:hover,
+        .sidebar-resize-handle-bottom.resizing {
+            background: rgba(102, 126, 234, 0.5);
+        }
+
+        /* Sidebar resize handle - corner (both width and height) */
+        .sidebar-resize-handle-corner {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            width: 12px;
+            height: 12px;
+            cursor: nwse-resize;
+            background: transparent;
+            transition: background 0.2s ease;
+            z-index: 11;
+            border-radius: 0 0 16px 0;
+        }
+
+        .sidebar-resize-handle-corner:hover,
+        .sidebar-resize-handle-corner.resizing {
+            background: rgba(102, 126, 234, 0.5);
+        }
+
+        /* Visual indicator for corner resize */
+        .sidebar-resize-handle-corner::after {
+            content: '';
+            position: absolute;
+            right: 3px;
+            bottom: 3px;
+            width: 6px;
+            height: 6px;
+            background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.2) 50%);
+            border-radius: 0 0 4px 0;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        #sidebar:hover .sidebar-resize-handle-corner::after {
+            opacity: 1;
         }
 
         .sidebar-header {
@@ -1055,6 +1112,7 @@ export const whiteboardStyles = `
         }
 
         #pinnedFileViewer {
+            display: none;
             flex: 1;
             min-height: 0;
             overflow: hidden;

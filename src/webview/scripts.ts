@@ -394,11 +394,15 @@ const vscode = acquireVsCodeApi();
                         }
                     }
                     saveState();
+                    // Update card list in Tab 2 if visible
+                    if (panelCards.classList.contains('active')) {
+                        renderCardList();
+                    }
                 }
                 hideContextMenu();
                 return;
             }
-            
+
             if (!contextBlockId) return;
             // Block logic (only if color is provided, ignore reset for now or handle if needed)
             if (color) {
@@ -2606,12 +2610,22 @@ const vscode = acquireVsCodeApi();
         
         // ========== Sidebar Resize ==========
         const sidebarResizeHandle = document.getElementById('sidebarResizeHandle');
+        const sidebarResizeHandleBottom = document.getElementById('sidebarResizeHandleBottom');
+        const sidebarResizeHandleCorner = document.getElementById('sidebarResizeHandleCorner');
+
         let isResizingSidebar = false;
+        let isResizingSidebarHeight = false;
+        let isResizingSidebarCorner = false;
         let sidebarStartWidth = 260;
+        let sidebarStartHeight = 0;
         let sidebarStartX = 0;
+        let sidebarStartY = 0;
         const MIN_SIDEBAR_WIDTH = 220;
         const MAX_SIDEBAR_WIDTH = 600;
-        
+        const MIN_SIDEBAR_HEIGHT = 300;
+        const MAX_SIDEBAR_HEIGHT = window.innerHeight - 32;
+
+        // Width resize (right edge)
         sidebarResizeHandle.addEventListener('mousedown', (e) => {
             e.preventDefault();
             isResizingSidebar = true;
@@ -2621,19 +2635,77 @@ const vscode = acquireVsCodeApi();
             document.body.style.cursor = 'ew-resize';
             document.body.style.userSelect = 'none';
         });
-        
-        document.addEventListener('mousemove', (e) => {
-            if (!isResizingSidebar) return;
-            
-            const dx = e.clientX - sidebarStartX;
-            const newWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, sidebarStartWidth + dx));
-            sidebar.style.width = newWidth + 'px';
+
+        // Height resize (bottom edge)
+        sidebarResizeHandleBottom.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isResizingSidebarHeight = true;
+            sidebarStartHeight = sidebar.offsetHeight;
+            sidebarStartY = e.clientY;
+            sidebarResizeHandleBottom.classList.add('resizing');
+            document.body.style.cursor = 'ns-resize';
+            document.body.style.userSelect = 'none';
         });
-        
+
+        // Corner resize (both width and height)
+        sidebarResizeHandleCorner.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isResizingSidebarCorner = true;
+            sidebarStartWidth = sidebar.offsetWidth;
+            sidebarStartHeight = sidebar.offsetHeight;
+            sidebarStartX = e.clientX;
+            sidebarStartY = e.clientY;
+            sidebarResizeHandleCorner.classList.add('resizing');
+            document.body.style.cursor = 'nwse-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            // Width resize
+            if (isResizingSidebar) {
+                const dx = e.clientX - sidebarStartX;
+                const newWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, sidebarStartWidth + dx));
+                sidebar.style.width = newWidth + 'px';
+            }
+
+            // Height resize
+            if (isResizingSidebarHeight) {
+                const dy = e.clientY - sidebarStartY;
+                const maxHeight = window.innerHeight - 32;
+                const newHeight = Math.min(maxHeight, Math.max(MIN_SIDEBAR_HEIGHT, sidebarStartHeight + dy));
+                sidebar.style.height = newHeight + 'px';
+                sidebar.style.maxHeight = newHeight + 'px';
+            }
+
+            // Corner resize (both)
+            if (isResizingSidebarCorner) {
+                const dx = e.clientX - sidebarStartX;
+                const dy = e.clientY - sidebarStartY;
+                const maxHeight = window.innerHeight - 32;
+                const newWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, sidebarStartWidth + dx));
+                const newHeight = Math.min(maxHeight, Math.max(MIN_SIDEBAR_HEIGHT, sidebarStartHeight + dy));
+                sidebar.style.width = newWidth + 'px';
+                sidebar.style.height = newHeight + 'px';
+                sidebar.style.maxHeight = newHeight + 'px';
+            }
+        });
+
         document.addEventListener('mouseup', () => {
             if (isResizingSidebar) {
                 isResizingSidebar = false;
                 sidebarResizeHandle.classList.remove('resizing');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+            if (isResizingSidebarHeight) {
+                isResizingSidebarHeight = false;
+                sidebarResizeHandleBottom.classList.remove('resizing');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+            if (isResizingSidebarCorner) {
+                isResizingSidebarCorner = false;
+                sidebarResizeHandleCorner.classList.remove('resizing');
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
             }
@@ -3139,20 +3211,46 @@ const vscode = acquireVsCodeApi();
             }
         }
 
-        // Center the whiteboard view on load
+        // Center the whiteboard view on cards bounding box, or whiteboard center if no cards
         function centerWhiteboard() {
-            const whiteboardWidth = whiteboard.offsetWidth;
-            const whiteboardHeight = whiteboard.offsetHeight;
             const containerWidth = canvasContainer.clientWidth;
             const containerHeight = canvasContainer.clientHeight;
-            
-            // Calculate center position
-            const centerX = (whiteboardWidth - containerWidth) / 2;
-            const centerY = (whiteboardHeight - containerHeight) / 2;
-            
-            // Set pan offset to center
-            panOffset.x = -centerX;
-            panOffset.y = -centerY;
+
+            // If there are cards, center on the bounding box of all cards
+            if (cards.length > 0) {
+                // Calculate bounding box of all cards
+                let minX = Infinity, minY = Infinity;
+                let maxX = -Infinity, maxY = -Infinity;
+
+                for (const card of cards) {
+                    minX = Math.min(minX, card.x);
+                    minY = Math.min(minY, card.y);
+                    maxX = Math.max(maxX, card.x + (card.width || 300));
+                    maxY = Math.max(maxY, card.y + (card.height || 200));
+                }
+
+                // Calculate center of bounding box
+                const boundsCenterX = (minX + maxX) / 2;
+                const boundsCenterY = (minY + maxY) / 2;
+
+                // Set pan offset so that the bounding box center is at the screen center
+                // Screen center in whiteboard coordinates should equal boundsCenterX/Y
+                // Formula: screenCenter = panOffset + boundsCenterX * zoomLevel
+                // So: panOffset = screenCenter - boundsCenterX * zoomLevel
+                panOffset.x = (containerWidth / 2) - boundsCenterX * zoomLevel;
+                panOffset.y = (containerHeight / 2) - boundsCenterY * zoomLevel;
+            } else {
+                // No cards, center on whiteboard absolute center
+                const whiteboardWidth = whiteboard.offsetWidth;
+                const whiteboardHeight = whiteboard.offsetHeight;
+
+                const centerX = (whiteboardWidth - containerWidth) / 2;
+                const centerY = (whiteboardHeight - containerHeight) / 2;
+
+                panOffset.x = -centerX;
+                panOffset.y = -centerY;
+            }
+
             updateWhiteboardTransform();
         }
         

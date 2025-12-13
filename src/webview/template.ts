@@ -5,6 +5,8 @@ export const whiteboardTemplate = `
 <!-- Sidebar (Figma-style floating panel) -->
     <div id="sidebar">
         <div class="sidebar-resize-handle" id="sidebarResizeHandle"></div>
+        <div class="sidebar-resize-handle-bottom" id="sidebarResizeHandleBottom"></div>
+        <div class="sidebar-resize-handle-corner" id="sidebarResizeHandleCorner"></div>
         <div class="sidebar-header">
             <div class="sidebar-tabs">
                 <button class="sidebar-tab active" id="tabPinned" title="常用文件">
@@ -50,7 +52,7 @@ export const whiteboardTemplate = `
                         Select file
                     </button>
                 </div>
-                <div id="pinnedFileViewer" style="display: none;"></div>
+                <div id="pinnedFileViewer"></div>
             </div>
 
             <!-- Tab 2: Card List -->
