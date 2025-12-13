@@ -2407,11 +2407,12 @@ const vscode = acquireVsCodeApi();
             }
         });
 
-        // Double-click to add block
+        // Double-click to open select/create card modal
         canvasContainer.addEventListener('dblclick', (e) => {
             if (e.target === whiteboard || e.target === canvasContainer) {
                 const pos = screenToWhiteboard(e.clientX, e.clientY);
-                addBlock(pos.x - 100, pos.y - 50);
+                pendingCardPosition = { x: pos.x, y: pos.y };
+                openFileSelector(null, 'card');
             }
         });
 
