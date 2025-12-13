@@ -38,8 +38,8 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-        // Create empty whiteboard file
-        const initialState = { blocks: [], cards: [] };
+        // Create empty whiteboard file with version number
+        const initialState = { version: 1, blocks: [], cards: [] };
         fs.writeFileSync(filePath, JSON.stringify(initialState, null, 2), 'utf-8');
 
         // Open the file (will trigger custom editor)

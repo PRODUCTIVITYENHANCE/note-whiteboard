@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 
+// Data format version - increment when making breaking changes to the data structure
+const CURRENT_DATA_VERSION = 1;
+
 interface Block {
     id: string;
     x: number;
@@ -21,6 +24,7 @@ interface Card {
 }
 
 interface WhiteboardState {
+    version: number;
     blocks: Block[];
     cards: Card[];
 }
@@ -490,36 +494,80 @@ export class WhiteboardPanel {
     }
 
     private _saveState(state: WhiteboardState) {
+        // Ensure version is always set to current version when saving
+        const stateToSave: WhiteboardState = {
+            version: CURRENT_DATA_VERSION,
+            blocks: state.blocks,
+            cards: state.cards
+        };
+
         if (this._document) {
             // File-based storage: write to .whiteboard.json file
             try {
                 const filePath = this._document.uri.fsPath;
-                fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf-8');
+                fs.writeFileSync(filePath, JSON.stringify(stateToSave, null, 2), 'utf-8');
             } catch (error) {
                 vscode.window.showErrorMessage(`Error saving whiteboard: ${error}`);
             }
         } else {
             // Legacy: use workspaceState
-            this._context.workspaceState.update('whiteboardState', state);
+            this._context.workspaceState.update('whiteboardState', stateToSave);
         }
     }
 
     private _loadState(): WhiteboardState {
+        let rawState: any;
+
         if (this._document) {
             // File-based storage: read from .whiteboard.json file
             try {
                 const content = this._document.getText();
                 if (content.trim()) {
-                    return JSON.parse(content);
+                    rawState = JSON.parse(content);
                 }
             } catch (error) {
                 console.error('Error parsing whiteboard file:', error);
             }
-            return { blocks: [], cards: [] };
         } else {
             // Legacy: use workspaceState
-            return this._context.workspaceState.get('whiteboardState', { blocks: [], cards: [] });
+            rawState = this._context.workspaceState.get('whiteboardState');
         }
+
+        // Migrate data if needed
+        return this._migrateState(rawState);
+    }
+
+    /**
+     * Migrate old data format to current version
+     * This ensures backward compatibility with older whiteboard files
+     */
+    private _migrateState(rawState: any): WhiteboardState {
+        // Default empty state
+        if (!rawState) {
+            return { version: CURRENT_DATA_VERSION, blocks: [], cards: [] };
+        }
+
+        const version = rawState.version || 0;
+        let state = { ...rawState };
+
+        // Migration: v0 (no version) -> v1
+        if (version < 1) {
+            console.log('Migrating whiteboard data from v0 to v1');
+            state = {
+                version: 1,
+                blocks: state.blocks || [],
+                cards: state.cards || []
+            };
+        }
+
+        // Future migrations can be added here:
+        // if (version < 2) {
+        //     console.log('Migrating whiteboard data from v1 to v2');
+        //     state.notes = state.notes || [];
+        //     state.version = 2;
+        // }
+
+        return state;
     }
 
     private _update() {
@@ -1265,15 +1313,25 @@ export class WhiteboardPanel {
             z-index: 999;
         }
 
-        /* Selected state for blocks and cards */
-        .block.selected {
-            outline: 3px solid #22d3ee;
+        /* Selected state for blocks and cards - unified white outline */
+        .block.selected,
+        .card.selected {
+            outline: 2px solid white;
             outline-offset: 2px;
+            box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.2), 0 12px 32px rgba(0, 0, 0, 0.5);
         }
 
-        .card.selected {
-            outline: 3px solid #22d3ee;
+        /* Editing state - also white outline for consistency */
+        .block.editing {
+            outline: 2px solid white;
             outline-offset: 2px;
+            box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.2), 0 12px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .card.editing {
+            outline: 2px solid white;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.2), 0 12px 32px rgba(0, 0, 0, 0.5);
         }
     </style>
 </head>
@@ -1394,6 +1452,15 @@ export class WhiteboardPanel {
         let isMultiDragging = false;
         let multiDragStart = { x: 0, y: 0 };
         let initialPositions = new Map();
+
+        // ========== Save Optimization ==========
+        // Debounce: delay save until user stops making changes (500ms)
+        // Dirty Flag: only save if there are actual changes
+        let saveTimeoutId = null;
+        let isDirty = false;
+        let lastSavedState = null;
+        const SAVE_DEBOUNCE_MS = 500;
+        // ========================================
 
         // Colors palette - 8 deep colors for white text visibility
         const colors = [
@@ -1623,7 +1690,7 @@ export class WhiteboardPanel {
                 element.style.opacity = '0';
                 setTimeout(() => element.remove(), 200);
             }
-            saveState();
+            forceSave(); // Use forceSave for delete operations
             hideContextMenu();
         }
 
@@ -1875,6 +1942,37 @@ export class WhiteboardPanel {
             selectedCards.clear();
         }
 
+        /**
+         * Exit all editing modes for blocks and cards
+         * Called when clicking on empty canvas area
+         */
+        function exitAllEditingModes() {
+            // Exit block editing mode
+            const editingBlocks = document.querySelectorAll('.block.editing');
+            editingBlocks.forEach(block => {
+                block.classList.remove('editing');
+                // Sync text content from input to display
+                const textarea = block.querySelector('.block-input');
+                const contentDiv = block.querySelector('.block-content');
+                if (textarea && contentDiv) {
+                    contentDiv.textContent = textarea.value;
+                }
+            });
+
+            // Exit card editing mode (blur active textarea)
+            const editingCards = document.querySelectorAll('.card.editing');
+            editingCards.forEach(card => {
+                card.classList.remove('editing');
+            });
+
+            // Blur any focused textarea/input
+            if (document.activeElement && 
+                (document.activeElement.tagName === 'TEXTAREA' || 
+                 document.activeElement.tagName === 'INPUT')) {
+                document.activeElement.blur();
+            }
+        }
+
         function toggleBlockSelection(blockId, additive = false) {
             if (!additive) {
                 clearSelection();
@@ -2073,8 +2171,63 @@ export class WhiteboardPanel {
             return selectedCards.has(cardId);
         }
 
+        /**
+         * Mark state as dirty and schedule a save
+         * Uses debounce to avoid saving too frequently
+         */
         function saveState() {
+            isDirty = true;
+            scheduleSave();
+        }
+
+        /**
+         * Schedule a save with debounce
+         * Cancels any pending save and starts a new timer
+         */
+        function scheduleSave() {
+            if (saveTimeoutId) {
+                clearTimeout(saveTimeoutId);
+            }
+            saveTimeoutId = setTimeout(() => {
+                performSave();
+            }, SAVE_DEBOUNCE_MS);
+        }
+
+        /**
+         * Actually perform the save if there are changes
+         * Uses dirty flag to skip unnecessary saves
+         */
+        function performSave() {
+            saveTimeoutId = null;
+            
+            if (!isDirty) {
+                return; // No changes, skip save
+            }
+
+            const currentState = JSON.stringify({ blocks, cards });
+            
+            // Check if state actually changed (deep comparison)
+            if (lastSavedState === currentState) {
+                isDirty = false;
+                return; // No actual changes, skip save
+            }
+
+            // Actually save
             vscode.postMessage({ command: 'saveState', state: { blocks, cards } });
+            lastSavedState = currentState;
+            isDirty = false;
+        }
+
+        /**
+         * Force an immediate save (used for critical operations)
+         * Bypasses debounce but still respects dirty flag
+         */
+        function forceSave() {
+            if (saveTimeoutId) {
+                clearTimeout(saveTimeoutId);
+                saveTimeoutId = null;
+            }
+            performSave();
         }
 
         function loadState(state) {
@@ -2255,6 +2408,15 @@ export class WhiteboardPanel {
                         content: textarea.value 
                     });
                 }, 500);
+            });
+
+            // Add editing class when focused for visual feedback
+            textarea.addEventListener('focus', () => {
+                div.classList.add('editing');
+            });
+
+            textarea.addEventListener('blur', () => {
+                div.classList.remove('editing');
             });
 
             // Context menu
@@ -2552,7 +2714,7 @@ export class WhiteboardPanel {
 
         // Event listeners
         document.getElementById('addBlock').addEventListener('click', () => addBlock());
-        document.getElementById('saveBtn').addEventListener('click', saveState);
+        document.getElementById('saveBtn').addEventListener('click', forceSave);
         document.getElementById('deleteBlockMenu').addEventListener('click', () => {
             if (contextCardId) {
                 // Delete card
@@ -2560,7 +2722,7 @@ export class WhiteboardPanel {
                 const el = document.getElementById(contextCardId);
                 if (el) el.remove();
                 contextCardId = null;
-                saveState();
+                forceSave(); // Use forceSave for delete operations
                 hideContextMenu();
             } else {
                 deleteBlock();
@@ -2632,6 +2794,9 @@ export class WhiteboardPanel {
             
             // Left click on empty canvas area - start selection box
             if (e.button === 0 && (e.target === whiteboard || e.target === canvasContainer)) {
+                // Exit all editing modes when clicking empty area
+                exitAllEditingModes();
+                
                 // Clear selection if not holding Shift
                 if (!e.shiftKey) {
                     clearSelection();

@@ -23,6 +23,11 @@ export declare class WhiteboardPanel {
     private _createNewCard;
     private _saveState;
     private _loadState;
+    /**
+     * Migrate old data format to current version
+     * This ensures backward compatibility with older whiteboard files
+     */
+    private _migrateState;
     private _update;
     private _getHtmlContent;
     dispose(): void;
