@@ -77,7 +77,7 @@ const vscode = acquireVsCodeApi();
         const selectPinnedFileBtn = document.getElementById('selectPinnedFile');
         const cardListElem = document.getElementById('cardList');
         const cardListEmpty = document.getElementById('cardListEmpty');
-        const colorFilterSelect = document.getElementById('colorFilter');
+        const colorFilterGrid = document.getElementById('colorFilterGrid');
         const stashDropzone = document.getElementById('stashDropzone');
         const stashListElem = document.getElementById('stashList');
         const stashEmpty = document.getElementById('stashEmpty');
@@ -732,6 +732,19 @@ const vscode = acquireVsCodeApi();
             selectionBox.style.width = width + 'px';
             selectionBox.style.height = height + 'px';
         }
+
+        /**
+         * Cancel and cleanup selection box without selecting items
+         * Called when mouse leaves the window or window loses focus
+         */
+        function cancelSelectionBox() {
+            if (selectionBox) {
+                selectionBox.remove();
+                selectionBox = null;
+            }
+            isSelecting = false;
+        }
+
 
         function endSelectionBox(e, additive = false) {
             if (!isSelecting || !selectionBox) return;
@@ -1967,6 +1980,36 @@ const vscode = acquireVsCodeApi();
             }
         });
 
+        // Cancel selection when mouse leaves the document/window
+        document.addEventListener('mouseleave', () => {
+            if (isSelecting) {
+                cancelSelectionBox();
+            }
+            if (isPanning) {
+                isPanning = false;
+                canvasContainer.style.cursor = 'grab';
+            }
+        });
+
+        // Cancel selection when window loses focus (e.g., clicking outside webview)
+        window.addEventListener('blur', () => {
+            if (isSelecting) {
+                cancelSelectionBox();
+            }
+            if (isPanning) {
+                isPanning = false;
+                canvasContainer.style.cursor = 'grab';
+            }
+        });
+
+        // Also cancel on visibility change (e.g., switching tabs)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && isSelecting) {
+                cancelSelectionBox();
+            }
+        });
+
+
         // Also support Space+drag for panning (like in design tools)
         let spacePressed = false;
         document.addEventListener('keydown', (e) => {
@@ -2224,6 +2267,41 @@ const vscode = acquireVsCodeApi();
             }
         }
         
+        // ========== Sidebar Resize ==========
+        const sidebarResizeHandle = document.getElementById('sidebarResizeHandle');
+        let isResizingSidebar = false;
+        let sidebarStartWidth = 320;
+        let sidebarStartX = 0;
+        const MIN_SIDEBAR_WIDTH = 280;
+        const MAX_SIDEBAR_WIDTH = 600;
+        
+        sidebarResizeHandle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isResizingSidebar = true;
+            sidebarStartWidth = sidebar.offsetWidth;
+            sidebarStartX = e.clientX;
+            sidebarResizeHandle.classList.add('resizing');
+            document.body.style.cursor = 'ew-resize';
+            document.body.style.userSelect = 'none';
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizingSidebar) return;
+            
+            const dx = e.clientX - sidebarStartX;
+            const newWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, sidebarStartWidth + dx));
+            sidebar.style.width = newWidth + 'px';
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizingSidebar) {
+                isResizingSidebar = false;
+                sidebarResizeHandle.classList.remove('resizing');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+        
         // Sidebar event listeners
         toggleSidebarBtn.addEventListener('click', toggleSidebar);
         closeSidebarBtn.addEventListener('click', toggleSidebar);
@@ -2317,34 +2395,43 @@ const vscode = acquireVsCodeApi();
         // ========== Tab 2: Card List ==========
         
         function initColorFilter() {
-            // Clear existing options except the first "All colors" option
-            colorFilterSelect.innerHTML = '<option value="">所有顏色</option>';
+            // Clear existing swatches
+            colorFilterGrid.innerHTML = '';
             
-            // Add color options
-            const colorNames = {
-                '#2563eb': '藍色',
-                '#dc2626': '紅色',
-                '#ea580c': '橘色',
-                '#16a34a': '綠色',
-                '#4b5563': '深灰',
-                '#7c3aed': '紫色',
-                '#db2777': '粉色',
-                '#92400e': '咖啡'
-            };
+            // Add "All colors" option first
+            const allColorsOption = document.createElement('div');
+            allColorsOption.className = 'color-filter-option all-colors active';
+            allColorsOption.dataset.color = '';
+            allColorsOption.title = '所有顏色';
+            allColorsOption.addEventListener('click', () => selectColorFilter(''));
+            colorFilterGrid.appendChild(allColorsOption);
             
+            // Add color swatches
             colors.forEach(color => {
-                const option = document.createElement('option');
-                option.value = color;
-                option.textContent = colorNames[color] || color;
-                option.style.color = color;
-                colorFilterSelect.appendChild(option);
+                const swatch = document.createElement('div');
+                swatch.className = 'color-filter-option';
+                swatch.style.background = color;
+                swatch.dataset.color = color;
+                swatch.addEventListener('click', () => selectColorFilter(color));
+                colorFilterGrid.appendChild(swatch);
             });
         }
         
-        colorFilterSelect.addEventListener('change', (e) => {
-            currentColorFilter = e.target.value;
+        function selectColorFilter(color) {
+            currentColorFilter = color;
+            
+            // Update active state
+            colorFilterGrid.querySelectorAll('.color-filter-option').forEach(opt => {
+                if (opt.dataset.color === color) {
+                    opt.classList.add('active');
+                } else {
+                    opt.classList.remove('active');
+                }
+            });
+            
             renderCardList();
-        });
+        }
+
         
         function formatTimeAgo(timestamp) {
             if (!timestamp) return '';

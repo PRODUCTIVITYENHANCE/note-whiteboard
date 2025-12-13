@@ -871,27 +871,50 @@ exports.whiteboardStyles = `
             box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.2), 0 12px 32px rgba(0, 0, 0, 0.5);
         }
 
-        /* ========== Sidebar Styles ========== */
+        /* ========== Sidebar Styles (Figma-style floating panel) ========== */
         #sidebar {
             position: fixed;
-            left: 0;
-            top: 0;
+            left: 16px;
+            top: 16px;
             width: 320px;
-            height: 100vh;
-            background: rgba(13, 13, 13, 0.95);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border-right: 1px solid #333;
+            height: 60vh;
+            min-height: 400px;
+            max-height: calc(100vh - 32px);
+            background: rgba(26, 26, 26, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid #333;
+            border-radius: 16px;
             z-index: 1001;
             display: flex;
             flex-direction: column;
-            transform: translateX(-100%);
+            transform: translateX(calc(-100% - 32px));
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+            overflow: hidden;
         }
 
         #sidebar.open {
             transform: translateX(0);
+        }
+
+        /* Sidebar resize handle */
+        .sidebar-resize-handle {
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 6px;
+            height: 100%;
+            cursor: ew-resize;
+            background: transparent;
+            transition: background 0.2s ease;
+            z-index: 10;
+            border-radius: 0 16px 16px 0;
+        }
+
+        .sidebar-resize-handle:hover,
+        .sidebar-resize-handle.resizing {
+            background: rgba(102, 126, 234, 0.5);
         }
 
         .sidebar-header {
@@ -900,17 +923,21 @@ exports.whiteboardStyles = `
             padding: 12px 16px;
             border-bottom: 1px solid #333;
             gap: 8px;
+            border-radius: 16px 16px 0 0;
         }
 
         .sidebar-tabs {
             display: flex;
             flex: 1;
             gap: 4px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 4px;
+            border-radius: 8px;
         }
 
         .sidebar-tab {
             flex: 1;
-            padding: 10px 12px;
+            padding: 8px 12px;
             background: transparent;
             border: none;
             border-radius: 6px;
@@ -923,12 +950,11 @@ exports.whiteboardStyles = `
         }
 
         .sidebar-tab:hover {
-            background: #1a1a1a;
             color: #ccc;
         }
 
         .sidebar-tab.active {
-            background: #1a1a1a;
+            background: rgba(255, 255, 255, 0.1);
             color: #fff;
         }
 
@@ -938,8 +964,8 @@ exports.whiteboardStyles = `
         }
 
         .sidebar-close {
-            width: 32px;
-            height: 32px;
+            width: 28px;
+            height: 28px;
             background: transparent;
             border: none;
             border-radius: 6px;
@@ -952,23 +978,26 @@ exports.whiteboardStyles = `
         }
 
         .sidebar-close:hover {
-            background: #1a1a1a;
+            background: rgba(255, 255, 255, 0.1);
             color: #fff;
         }
 
         .sidebar-content {
             flex: 1;
             overflow-y: auto;
-            padding: 16px;
+            padding: 12px;
         }
 
         .sidebar-panel {
             display: none;
+            height: 100%;
         }
 
         .sidebar-panel.active {
-            display: block;
+            display: flex;
+            flex-direction: column;
         }
+
 
         /* Tab 1: Pinned Files */
         .pinned-files-empty {
@@ -979,6 +1008,7 @@ exports.whiteboardStyles = `
             padding: 40px 20px;
             text-align: center;
             color: #666;
+            flex: 1;
         }
 
         .pinned-files-empty svg {
@@ -990,7 +1020,7 @@ exports.whiteboardStyles = `
 
         .select-file-btn {
             padding: 10px 20px;
-            background: #1a1a1a;
+            background: rgba(255, 255, 255, 0.05);
             border: 1px solid #333;
             border-radius: 8px;
             color: #ccc;
@@ -1004,13 +1034,17 @@ exports.whiteboardStyles = `
         }
 
         .select-file-btn:hover {
-            background: #2a2a2a;
+            background: rgba(255, 255, 255, 0.1);
             color: #fff;
             border-color: #555;
         }
 
+        /* Pinned file viewer - full width, auto height */
         .pinned-file-viewer {
-            background: #0a0a0a;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            background: rgba(0, 0, 0, 0.3);
             border: 1px solid #333;
             border-radius: 8px;
             overflow: hidden;
@@ -1023,6 +1057,7 @@ exports.whiteboardStyles = `
             background: rgba(255, 255, 255, 0.05);
             border-bottom: 1px solid #333;
             gap: 8px;
+            flex-shrink: 0;
         }
 
         .pinned-file-header .filename {
@@ -1054,63 +1089,93 @@ exports.whiteboardStyles = `
         }
 
         .pinned-file-actions button:hover {
-            background: #333;
+            background: rgba(255, 255, 255, 0.1);
             color: #fff;
         }
 
         .pinned-file-content {
+            flex: 1;
             padding: 12px;
-            max-height: calc(100vh - 200px);
             overflow-y: auto;
         }
 
         .pinned-file-textarea {
             width: 100%;
-            min-height: 200px;
+            height: 100%;
+            min-height: 100%;
             background: transparent;
             border: none;
             color: #ccc;
             font-size: 13px;
-            font-family: inherit;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
             line-height: 1.6;
-            resize: vertical;
+            resize: none;
             outline: none;
         }
+
 
         /* Tab 2: Card List */
         .card-list-controls {
             display: flex;
+            flex-direction: column;
             gap: 8px;
             margin-bottom: 12px;
         }
 
-        .color-filter {
-            flex: 1;
-            padding: 8px 12px;
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 6px;
-            color: #ccc;
-            font-size: 13px;
-            cursor: pointer;
-            outline: none;
+        .color-filter-label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
         }
 
-        .color-filter:focus {
-            border-color: #667eea;
+        /* Color swatch grid filter */
+        .color-filter-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .color-filter-option {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+        }
+
+        .color-filter-option:hover {
+            transform: scale(1.1);
+            border-color: rgba(255, 255, 255, 0.3);
+            z-index: 1;
+        }
+
+        .color-filter-option.active {
+            border-color: #fff;
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+        }
+
+        .color-filter-option.all-colors {
+            background: linear-gradient(135deg, #2563eb 0%, #dc2626 25%, #ea580c 50%, #16a34a 75%, #7c3aed 100%);
         }
 
         .card-list {
             display: flex;
             flex-direction: column;
             gap: 8px;
+            flex: 1;
+            overflow-y: auto;
         }
+
 
         .card-list-item {
             display: flex;
             align-items: center;
-            padding: 12px;
-            background: #1a1a1a;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
             border: 1px solid #333;
             border-radius: 8px;
             cursor: pointer;
@@ -1119,10 +1184,10 @@ exports.whiteboardStyles = `
         }
 
         .card-list-item:hover {
-            background: #2a2a2a;
+            background: rgba(255, 255, 255, 0.1);
             border-color: #444;
-            transform: translateX(4px);
         }
+
 
         .card-list-item .color-dot {
             width: 12px;
@@ -1158,13 +1223,14 @@ exports.whiteboardStyles = `
 
         /* Tab 3: Stash */
         .stash-dropzone {
-            border: 2px dashed #333;
+            border: 2px dashed rgba(255, 255, 255, 0.2);
             border-radius: 8px;
-            padding: 20px;
+            padding: 16px;
             text-align: center;
             color: #666;
             margin-bottom: 12px;
             transition: all 0.2s ease;
+            flex-shrink: 0;
         }
 
         .stash-dropzone.drag-over {
@@ -1174,22 +1240,24 @@ exports.whiteboardStyles = `
         }
 
         .stash-dropzone svg {
-            width: 32px;
-            height: 32px;
-            margin-bottom: 8px;
+            width: 28px;
+            height: 28px;
+            margin-bottom: 6px;
         }
 
         .stash-list {
             display: flex;
             flex-direction: column;
             gap: 8px;
+            flex: 1;
+            overflow-y: auto;
         }
 
         .stash-item {
             display: flex;
             align-items: center;
-            padding: 12px;
-            background: #1a1a1a;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
             border: 1px solid #333;
             border-radius: 8px;
             gap: 10px;
@@ -1197,9 +1265,10 @@ exports.whiteboardStyles = `
         }
 
         .stash-item:hover {
-            background: #2a2a2a;
+            background: rgba(255, 255, 255, 0.1);
             border-color: #444;
         }
+
 
         .stash-item .color-dot {
             width: 12px;
