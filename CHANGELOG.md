@@ -4,6 +4,19 @@
 
 ## [1.0.0] - 2024-12-13
 
+### Added - Milkdown WYSIWYG 編輯器
+- **即時渲染 Markdown 編輯**: 卡片內容從 `<textarea>` 升級為 Milkdown 所見即所得編輯器，支援即時預覽 Markdown 格式（粗體、斜體、標題、列表、程式碼區塊等）。
+- **GFM 支援**: 整合 GitHub Flavored Markdown 擴充，支援表格、刪除線、任務清單等語法。
+- **編輯歷史記錄**: 每張卡片的編輯器內建獨立的 Undo/Redo 歷史（`Ctrl/Cmd+Z` 與 `Ctrl/Cmd+Shift+Z`）。
+- **多實例管理**: 每張卡片擁有獨立的編輯器實例，互不干擾，刪除卡片時自動清理。
+- **雙向同步**: 編輯器內容變更自動儲存至 `.md` 檔案；外部修改 `.md` 檔案時，卡片內容即時更新。
+- **防抖動儲存**: 編輯內容變更後延遲 500ms 再儲存，避免頻繁寫入檔案。
+
+### Technical - 技術架構
+- **Webview 打包流程**: 新增 esbuild 打包配置，將 Milkdown 及相關依賴打包為單一 `webview.bundle.js`（約 530KB）。
+- **模組化架構**: 新增 `src/webview/index.ts`（入口）與 `src/webview/milkdown-editor.ts`（Milkdown 封裝）。
+- **主題整合**: 整合 Nord 主題並自訂樣式，與白板深色風格協調。
+
 ### Added - 新功能
 - **卡片清單排序**: 側邊欄 Tab 2 卡片清單現在依照「最後編輯時間」排序，最新修改的卡片顯示在最上方。
 - **Cmd/Option 點擊開檔**: 
