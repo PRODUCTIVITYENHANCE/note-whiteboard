@@ -3,8 +3,9 @@ node_modules/**
 src/**
 .gitignore
 tsconfig.json
-**/*.ts
-**/*.map
+**/*.d.ts
+**/*.d.ts.map
+**/*.ts.map
 .agent/**
 test/**
 scripts/**

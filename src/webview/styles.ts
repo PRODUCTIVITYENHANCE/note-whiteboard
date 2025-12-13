@@ -1548,4 +1548,173 @@ export const whiteboardStyles = `
         }
 
         /* Sidebar is now overlay, no need to adjust toolbar or canvas */
+
+        /* ========================================
+           Milkdown Editor Styles
+           ======================================== */
+        
+        /* Container for Milkdown editor inside cards */
+        .milkdown-container {
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            background: transparent;
+        }
+
+        /* Milkdown editor root */
+        .milkdown-container .milkdown {
+            color: #ccc;
+            background: transparent;
+            min-height: 100%;
+            padding: 12px;
+            font-size: 13px;
+            line-height: 1.6;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        /* Override Nord theme for dark mode consistency */
+        .milkdown-container .milkdown .editor {
+            outline: none;
+        }
+
+        .milkdown-container .milkdown p {
+            margin: 0 0 0.75em 0;
+            color: #ccc;
+        }
+
+        .milkdown-container .milkdown h1,
+        .milkdown-container .milkdown h2,
+        .milkdown-container .milkdown h3,
+        .milkdown-container .milkdown h4,
+        .milkdown-container .milkdown h5,
+        .milkdown-container .milkdown h6 {
+            color: #fff;
+            font-weight: 600;
+            margin: 1em 0 0.5em 0;
+        }
+
+        .milkdown-container .milkdown h1 { font-size: 1.5em; }
+        .milkdown-container .milkdown h2 { font-size: 1.3em; }
+        .milkdown-container .milkdown h3 { font-size: 1.15em; }
+
+        .milkdown-container .milkdown ul,
+        .milkdown-container .milkdown ol {
+            padding-left: 1.5em;
+            margin: 0 0 0.75em 0;
+            color: #ccc;
+        }
+
+        .milkdown-container .milkdown li {
+            margin: 0.25em 0;
+        }
+
+        .milkdown-container .milkdown code {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.1em 0.3em;
+            border-radius: 4px;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 0.9em;
+        }
+
+        .milkdown-container .milkdown pre {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 12px;
+            overflow-x: auto;
+            margin: 0.5em 0;
+        }
+
+        .milkdown-container .milkdown pre code {
+            background: transparent;
+            padding: 0;
+        }
+
+        .milkdown-container .milkdown blockquote {
+            border-left: 3px solid #667eea;
+            padding-left: 12px;
+            margin: 0.5em 0;
+            color: #888;
+            font-style: italic;
+        }
+
+        .milkdown-container .milkdown a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .milkdown-container .milkdown a:hover {
+            text-decoration: underline;
+        }
+
+        .milkdown-container .milkdown hr {
+            border: none;
+            border-top: 1px solid #333;
+            margin: 1em 0;
+        }
+
+        .milkdown-container .milkdown table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 0.5em 0;
+        }
+
+        .milkdown-container .milkdown th,
+        .milkdown-container .milkdown td {
+            border: 1px solid #333;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .milkdown-container .milkdown th {
+            background: #252525;
+            font-weight: 600;
+        }
+
+        .milkdown-container .milkdown img {
+            max-width: 100%;
+            border-radius: 6px;
+        }
+
+        .milkdown-container .milkdown .task-list-item {
+            list-style: none;
+            margin-left: -1.5em;
+        }
+
+        .milkdown-container .milkdown .task-list-item input[type="checkbox"] {
+            margin-right: 0.5em;
+        }
+
+        /* Milkdown scrollbar */
+        .milkdown-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .milkdown-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .milkdown-container::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
+        }
+
+        .milkdown-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Hide textarea when using Milkdown */
+        .card.using-milkdown .card-textarea {
+            display: none;
+        }
+
+        /* Loading state for Milkdown */
+        .milkdown-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #666;
+            font-size: 14px;
+        }
 `;

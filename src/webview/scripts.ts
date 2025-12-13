@@ -1408,9 +1408,25 @@ const vscode = acquireVsCodeApi();
             const content = document.createElement('div');
             content.className = 'card-content';
             
-            // Textarea for editing
+            // Milkdown container (preferred editor)
+            const milkdownContainer = document.createElement('div');
+            milkdownContainer.className = 'milkdown-editor-wrapper';
+            milkdownContainer.dataset.cardId = card.id;
+            milkdownContainer.style.width = '100%';
+            milkdownContainer.style.height = '100%';
+            
+            // Loading indicator
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'milkdown-loading';
+            loadingDiv.textContent = 'Loading...';
+            milkdownContainer.appendChild(loadingDiv);
+            
+            content.appendChild(milkdownContainer);
+            
+            // Textarea (fallback for non-Milkdown mode)
             const textarea = document.createElement('textarea');
             textarea.className = 'card-textarea';
+            textarea.style.display = 'none'; // Hidden by default, shown if Milkdown fails
             textarea.placeholder = 'Loading...';
             textarea.dataset.cardId = card.id;
             content.appendChild(textarea);
@@ -2119,31 +2135,40 @@ const vscode = acquireVsCodeApi();
                     // File was changed externally (e.g., in VS Code editor)
                     // Update the card content if it's not currently being edited
                     const changedTextarea = document.querySelector(\`textarea[data-card-id=\"\${message.cardId}\"]\`);
-                    if (changedTextarea) {
+                    const changedCard = changedTextarea ? changedTextarea.closest('.card') : document.getElementById(message.cardId);
+                    
+                    if (changedCard) {
                         // If card was disconnected, reconnect it
-                        const changedCard = changedTextarea.closest('.card');
-                        if (changedCard && changedCard.classList.contains('disconnected')) {
+                        if (changedCard.classList.contains('disconnected')) {
                             changedCard.classList.remove('disconnected');
                             const disconnectedContainer = changedCard.querySelector('.disconnected-container');
                             if (disconnectedContainer) disconnectedContainer.style.display = 'none';
-                            changedTextarea.style.display = '';
                         }
                         
-                        // Only update if the textarea is not focused (user not actively editing)
-                        if (document.activeElement !== changedTextarea) {
-                            changedTextarea.value = message.content;
-                        } else {
-                            // If user is editing, store the new content and notify later
-                            changedTextarea.dataset.pendingContent = message.content;
-                            // Add a visual indicator that file was changed externally
-                            const card = changedTextarea.closest('.card');
-                            if (card && !card.classList.contains('external-change')) {
-                                card.classList.add('external-change');
-                                // Remove the indicator when user clicks away
-                                changedTextarea.addEventListener('blur', function onBlur() {
-                                    card.classList.remove('external-change');
-                                    changedTextarea.removeEventListener('blur', onBlur);
-                                }, { once: true });
+                        // Update Milkdown if available
+                        if (changedCard.classList.contains('using-milkdown') && window.milkdownManager) {
+                            // Only update if the editor is not focused (user not actively editing)
+                            const isFocused = window.milkdownManager.isFocused(message.cardId);
+                            if (!isFocused) {
+                                window.milkdownManager.setMarkdown(message.cardId, message.content);
+                            } else {
+                                console.log('[Milkdown] Skipping external update - editor is focused');
+                            }
+                        } else if (changedTextarea) {
+                            // Update textarea
+                            if (document.activeElement !== changedTextarea) {
+                                changedTextarea.value = message.content;
+                            } else {
+                                // If user is editing, store the new content and notify later
+                                changedTextarea.dataset.pendingContent = message.content;
+                                // Add a visual indicator that file was changed externally
+                                if (!changedCard.classList.contains('external-change')) {
+                                    changedCard.classList.add('external-change');
+                                    changedTextarea.addEventListener('blur', function onBlur() {
+                                        changedCard.classList.remove('external-change');
+                                        changedTextarea.removeEventListener('blur', onBlur);
+                                    }, { once: true });
+                                }
                             }
                         }
                     }
@@ -2163,7 +2188,9 @@ const vscode = acquireVsCodeApi();
                     }
                     break;
                 case 'cardContent':
-                    const cardTextarea = document.querySelector(\`textarea[data-card-id="\${message.cardId}"]\`);
+                    const cardTextarea = document.querySelector(\`textarea[data-card-id=\"\${message.cardId}\"]\`);
+                    const milkdownWrapper = document.querySelector(\`.milkdown-editor-wrapper[data-card-id=\"\${message.cardId}\"]\`);
+                    
                     if (cardTextarea) {
                         // File exists - remove disconnected state if present
                         const cardEl = cardTextarea.closest('.card');
@@ -2171,10 +2198,51 @@ const vscode = acquireVsCodeApi();
                             cardEl.classList.remove('disconnected');
                             const disconnectedContainer = cardEl.querySelector('.disconnected-container');
                             if (disconnectedContainer) disconnectedContainer.style.display = 'none';
-                            cardTextarea.style.display = '';
                         }
+                        
+                        // Store content for fallback
                         cardTextarea.value = message.content;
                         cardTextarea.placeholder = 'Type here...';
+                        
+                        // Try to initialize Milkdown
+                        if (milkdownWrapper && window.milkdownManager) {
+                            // Clear loading indicator
+                            milkdownWrapper.innerHTML = '';
+                            
+                            // Get card info for save callback
+                            const cardData = cards.find(c => c.id === message.cardId);
+                            
+                            // Initialize Milkdown editor
+                            window.milkdownManager.createEditor(
+                                milkdownWrapper,
+                                message.cardId,
+                                message.content,
+                                (cardId, markdown) => {
+                                    // On content change, save to file
+                                    if (cardData) {
+                                        vscode.postMessage({ 
+                                            command: 'saveCardContent', 
+                                            filePath: cardData.filePath, 
+                                            content: markdown 
+                                        });
+                                        updateCardLastModified(cardId);
+                                        saveState();
+                                    }
+                                }
+                            ).then(() => {
+                                console.log('[Milkdown] Editor initialized for card:', message.cardId);
+                                cardEl.classList.add('using-milkdown');
+                            }).catch((err) => {
+                                console.error('[Milkdown] Failed to initialize:', err);
+                                // Fallback to textarea
+                                milkdownWrapper.style.display = 'none';
+                                cardTextarea.style.display = '';
+                            });
+                        } else {
+                            // Milkdown not available, use textarea
+                            if (milkdownWrapper) milkdownWrapper.style.display = 'none';
+                            cardTextarea.style.display = '';
+                        }
                     }
                     break;
                 case 'cardCreated':
@@ -2297,7 +2365,10 @@ const vscode = acquireVsCodeApi();
         document.getElementById('saveBtn').addEventListener('click', forceSave);
         document.getElementById('deleteBlockMenu').addEventListener('click', () => {
             if (contextCardId) {
-                // Delete card
+                // Delete card - cleanup Milkdown first if exists
+                if (window.milkdownManager && window.milkdownManager.hasEditor(contextCardId)) {
+                    window.milkdownManager.destroyEditor(contextCardId);
+                }
                 cards = cards.filter(c => c.id !== contextCardId);
                 const el = document.getElementById(contextCardId);
                 if (el) el.remove();
@@ -2658,6 +2729,10 @@ const vscode = acquireVsCodeApi();
             
             // Delete selected cards
             selectedCards.forEach(cardId => {
+                // Cleanup Milkdown first if exists
+                if (window.milkdownManager && window.milkdownManager.hasEditor(cardId)) {
+                    window.milkdownManager.destroyEditor(cardId);
+                }
                 cards = cards.filter(c => c.id !== cardId);
                 const element = document.getElementById(cardId);
                 if (element) {
@@ -3350,7 +3425,10 @@ const vscode = acquireVsCodeApi();
                 originalHeight: card.height || 200
             });
             
-            // Remove from whiteboard
+            // Remove from whiteboard - cleanup Milkdown first
+            if (window.milkdownManager && window.milkdownManager.hasEditor(cardId)) {
+                window.milkdownManager.destroyEditor(cardId);
+            }
             cards = cards.filter(c => c.id !== cardId);
             const cardEl = document.getElementById(cardId);
             if (cardEl) {

@@ -21,6 +21,8 @@
     ],
     "exclude": [
         "node_modules",
-        "dist"
+        "dist",
+        "src/webview/index.ts",
+        "src/webview/milkdown-editor.ts"
     ]
 }

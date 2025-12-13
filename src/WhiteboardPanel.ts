@@ -35,7 +35,8 @@ export class WhiteboardPanel {
                 enableScripts: true,
                 retainContextWhenHidden: true,
                 localResourceRoots: [
-                    vscode.Uri.joinPath(context.extensionUri, 'media')
+                    vscode.Uri.joinPath(context.extensionUri, 'media'),
+                    vscode.Uri.joinPath(context.extensionUri, 'dist')
                 ]
             }
         );
@@ -53,7 +54,8 @@ export class WhiteboardPanel {
         panel.webview.options = {
             enableScripts: true,
             localResourceRoots: [
-                vscode.Uri.joinPath(context.extensionUri, 'media')
+                vscode.Uri.joinPath(context.extensionUri, 'media'),
+                vscode.Uri.joinPath(context.extensionUri, 'dist')
             ]
         };
 
@@ -853,6 +855,11 @@ export class WhiteboardPanel {
     }
 
     private _getHtmlContent(): string {
+        // Get URI for the webview bundle
+        const webviewBundleUri = this._panel.webview.asWebviewUri(
+            vscode.Uri.joinPath(this._context.extensionUri, 'dist', 'webview.bundle.js')
+        );
+
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -865,6 +872,9 @@ ${whiteboardStyles}
 </head>
 <body>
 ${whiteboardTemplate}
+    <!-- Load Milkdown bundle first -->
+    <script src="${webviewBundleUri}"></script>
+    <!-- Then load the main whiteboard scripts -->
     <script>
 ${whiteboardScripts}
     </script>
