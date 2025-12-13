@@ -2430,22 +2430,32 @@ const vscode = acquireVsCodeApi();
             const card = cards.find(c => c.id === contextCardId);
             const cardElement = document.getElementById(contextCardId);
             if (card && cardElement) {
-                const textarea = cardElement.querySelector('textarea');
-                if (textarea) {
-                    // Get the header height (typically ~32px)
-                    const header = cardElement.querySelector('.card-header');
-                    const headerHeight = header ? header.offsetHeight : 32;
-                    
-                    // Calculate the new height based on text content
-                    // Add padding for better visual appearance
-                    const padding = 16; // some bottom padding
-                    const newHeight = textarea.scrollHeight + headerHeight + padding;
-                    
-                    // Apply the new height (minimum 100px to avoid too small cards)
+                // Get the header height (typically ~32px)
+                const header = cardElement.querySelector('.card-header');
+                const headerHeight = header ? header.offsetHeight : 32;
+                const padding = 16; // some bottom padding
+
+                let contentHeight = 0;
+
+                // Check if using Milkdown editor
+                const milkdownEditor = cardElement.querySelector('.milkdown');
+                if (milkdownEditor && cardElement.classList.contains('using-milkdown')) {
+                    // For Milkdown, get the actual content height
+                    contentHeight = milkdownEditor.scrollHeight;
+                } else {
+                    // Fallback to textarea
+                    const textarea = cardElement.querySelector('textarea');
+                    if (textarea) {
+                        contentHeight = textarea.scrollHeight;
+                    }
+                }
+
+                if (contentHeight > 0) {
+                    const newHeight = contentHeight + headerHeight + padding;
                     const finalHeight = Math.max(100, newHeight);
                     card.height = finalHeight;
                     cardElement.style.height = finalHeight + 'px';
-                    
+
                     saveState();
                 }
             }
