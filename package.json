@@ -47,6 +47,38 @@
                 "command": "whiteboard.createNew",
                 "title": "Create New Whiteboard",
                 "category": "Whiteboard"
+            },
+            {
+                "command": "whiteboard.sidebarTab1",
+                "title": "Toggle Sidebar Tab 1 (Pinned)",
+                "category": "Whiteboard"
+            },
+            {
+                "command": "whiteboard.sidebarTab2",
+                "title": "Toggle Sidebar Tab 2 (Cards)",
+                "category": "Whiteboard"
+            },
+            {
+                "command": "whiteboard.sidebarTab3",
+                "title": "Toggle Sidebar Tab 3 (Stash)",
+                "category": "Whiteboard"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "whiteboard.sidebarTab1",
+                "key": "cmd+shift+1",
+                "when": "activeCustomEditorId == 'whiteboard.editor'"
+            },
+            {
+                "command": "whiteboard.sidebarTab2",
+                "key": "cmd+shift+2",
+                "when": "activeCustomEditorId == 'whiteboard.editor'"
+            },
+            {
+                "command": "whiteboard.sidebarTab3",
+                "key": "cmd+shift+3",
+                "when": "activeCustomEditorId == 'whiteboard.editor'"
             }
         ],
         "menus": {

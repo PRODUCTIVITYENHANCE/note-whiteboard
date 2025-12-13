@@ -2357,6 +2357,25 @@ const vscode = acquireVsCodeApi();
                         saveState();
                     }
                     break;
+                case 'toggleSidebarTab':
+                    // Handle sidebar tab toggle from keyboard shortcut
+                    const targetTab = message.tabName;
+                    const currentTab = getCurrentActiveTab();
+
+                    if (!sidebarOpen) {
+                        // Sidebar is closed - open it and switch to the target tab
+                        sidebarOpen = true;
+                        sidebar.classList.add('open');
+                        switchTab(targetTab);
+                    } else if (currentTab === targetTab) {
+                        // Already on the target tab - close sidebar
+                        sidebarOpen = false;
+                        sidebar.classList.remove('open');
+                    } else {
+                        // Sidebar is open but on different tab - switch to target tab
+                        switchTab(targetTab);
+                    }
+                    break;
             }
         });
 
@@ -3060,7 +3079,7 @@ const vscode = acquireVsCodeApi();
             // Update tab buttons
             [tabPinned, tabCards, tabStash].forEach(tab => tab.classList.remove('active'));
             [panelPinned, panelCards, panelStash].forEach(panel => panel.classList.remove('active'));
-            
+
             if (tabName === 'pinned') {
                 tabPinned.classList.add('active');
                 panelPinned.classList.add('active');
@@ -3073,6 +3092,16 @@ const vscode = acquireVsCodeApi();
                 panelStash.classList.add('active');
                 renderStash();
             }
+        }
+
+        /**
+         * Get the currently active sidebar tab name
+         */
+        function getCurrentActiveTab() {
+            if (tabPinned.classList.contains('active')) return 'pinned';
+            if (tabCards.classList.contains('active')) return 'cards';
+            if (tabStash.classList.contains('active')) return 'stash';
+            return 'pinned'; // Default
         }
         
         // ========== Sidebar Resize ==========

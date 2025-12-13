@@ -97,17 +97,59 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    context.subscriptions.push(openCommand, createNewCommand, openAsTextCommand, customEditorDisposable);
+    // Register sidebar tab shortcut commands
+    const sidebarTab1Command = vscode.commands.registerCommand('whiteboard.sidebarTab1', () => {
+        if (customEditorProvider.activePanel) {
+            customEditorProvider.activePanel.webview.postMessage({ command: 'toggleSidebarTab', tabName: 'pinned' });
+        }
+    });
+
+    const sidebarTab2Command = vscode.commands.registerCommand('whiteboard.sidebarTab2', () => {
+        if (customEditorProvider.activePanel) {
+            customEditorProvider.activePanel.webview.postMessage({ command: 'toggleSidebarTab', tabName: 'cards' });
+        }
+    });
+
+    const sidebarTab3Command = vscode.commands.registerCommand('whiteboard.sidebarTab3', () => {
+        if (customEditorProvider.activePanel) {
+            customEditorProvider.activePanel.webview.postMessage({ command: 'toggleSidebarTab', tabName: 'stash' });
+        }
+    });
+
+    context.subscriptions.push(openCommand, createNewCommand, openAsTextCommand, customEditorDisposable, sidebarTab1Command, sidebarTab2Command, sidebarTab3Command);
 }
 
 class WhiteboardEditorProvider implements vscode.CustomTextEditorProvider {
+    private _activePanel: vscode.WebviewPanel | undefined;
+
     constructor(private readonly context: vscode.ExtensionContext) { }
+
+    get activePanel(): vscode.WebviewPanel | undefined {
+        return this._activePanel;
+    }
 
     async resolveCustomTextEditor(
         document: vscode.TextDocument,
         webviewPanel: vscode.WebviewPanel,
         _token: vscode.CancellationToken
     ): Promise<void> {
+        // Track the active panel
+        this._activePanel = webviewPanel;
+
+        // When panel becomes active, update the reference
+        webviewPanel.onDidChangeViewState(e => {
+            if (e.webviewPanel.active) {
+                this._activePanel = webviewPanel;
+            }
+        });
+
+        // When panel is disposed, clear the reference
+        webviewPanel.onDidDispose(() => {
+            if (this._activePanel === webviewPanel) {
+                this._activePanel = undefined;
+            }
+        });
+
         // Use the WhiteboardPanel but with file-based storage
         WhiteboardPanel.createFromDocument(this.context, webviewPanel, document);
     }
