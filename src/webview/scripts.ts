@@ -12,6 +12,7 @@ const vscode = acquireVsCodeApi();
         const colorGrid = document.getElementById('colorGrid');
         const newCardModal = document.getElementById('newCardModal');
         const dropIndicator = document.getElementById('dropIndicator');
+        const resetColorBtn = document.getElementById('resetColorBtn');
         const renameCardModal = document.getElementById('renameCardModal');
         const moveCardModal = document.getElementById('moveCardModal');
         const folderList = document.getElementById('folderList');
@@ -101,6 +102,26 @@ const vscode = acquireVsCodeApi();
         let pendingMultiDragUpdate = false;
         // ======================================
 
+        // Helper to mix color with base for opaque result
+        function mixWithBase(color, baseColor, alpha) {
+            const h2d = (h) => parseInt(h, 16);
+            const r1 = h2d(color.slice(1, 3));
+            const g1 = h2d(color.slice(3, 5));
+            const b1 = h2d(color.slice(5, 7));
+            
+            const r2 = h2d(baseColor.slice(1, 3));
+            const g2 = h2d(baseColor.slice(3, 5));
+            const b2 = h2d(baseColor.slice(5, 7));
+            
+            const r = Math.round(r1 * alpha + r2 * (1 - alpha));
+            const g = Math.round(g1 * alpha + g2 * (1 - alpha));
+            const b = Math.round(b1 * alpha + b2 * (1 - alpha));
+            
+            return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        }
+
+        const CARD_BASE_COLOR = '#1a1a1a';
+
         // Colors palette - 8 deep colors for white text visibility
         const colors = [
             '#2563eb', // 藍 Blue
@@ -122,6 +143,10 @@ const vscode = acquireVsCodeApi();
             colorDiv.addEventListener('click', () => changeBlockColor(color));
             colorGrid.appendChild(colorDiv);
         });
+
+        if (resetColorBtn) {
+            resetColorBtn.addEventListener('click', () => changeBlockColor(null));
+        }
 
         function generateId() {
             return 'block_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -333,21 +358,39 @@ const vscode = acquireVsCodeApi();
         }
 
         function changeBlockColor(color) {
+            // Update active state in UI
+            document.querySelectorAll('.color-option').forEach(el => {
+                if (color && el.dataset.color === color) {
+                    el.classList.add('active');
+                } else {
+                    el.classList.remove('active');
+                }
+            });
+
             if (contextCardId) {
                 // Change card color
                 const card = cards.find(c => c.id === contextCardId);
                 if (card) {
-                    card.color = color;
+                    card.color = color; // Can be null for reset
                     const element = document.getElementById(contextCardId);
                     if (element) {
-                        // Apply to entire card (lighter)
-                        element.style.background = colorWithAlpha(color, 0.15);
-                        element.style.borderColor = colorWithAlpha(color, 0.4);
-                        
-                        // Apply to header (slightly more opaque)
                         const header = element.querySelector('.card-header');
-                        if (header) {
-                            header.style.background = colorWithAlpha(color, 0.35);
+                        if (color) {
+                            // Apply to entire card (opaque mix)
+                            element.style.background = mixWithBase(color, CARD_BASE_COLOR, 0.15);
+                            element.style.borderColor = mixWithBase(color, CARD_BASE_COLOR, 0.4);
+                            
+                            // Apply to header (slightly more opaque mix)
+                            if (header) {
+                                header.style.background = mixWithBase(color, CARD_BASE_COLOR, 0.35);
+                            }
+                        } else {
+                            // Reset to default
+                            element.style.background = ''; // css default #1a1a1a
+                            element.style.borderColor = ''; // css default #333
+                            if (header) {
+                                header.style.background = ''; // css default #252525
+                            }
                         }
                     }
                     saveState();
@@ -357,12 +400,15 @@ const vscode = acquireVsCodeApi();
             }
             
             if (!contextBlockId) return;
-            const block = blocks.find(b => b.id === contextBlockId);
-            if (block) {
-                block.color = color;
-                const element = document.getElementById(contextBlockId);
-                element.style.background = color;
-                saveState();
+            // Block logic (only if color is provided, ignore reset for now or handle if needed)
+            if (color) {
+                const block = blocks.find(b => b.id === contextBlockId);
+                if (block) {
+                    block.color = color;
+                    const element = document.getElementById(contextBlockId);
+                    element.style.background = color;
+                    saveState();
+                }
             }
             hideContextMenu();
         }
@@ -1105,10 +1151,10 @@ const vscode = acquireVsCodeApi();
                 div.style.height = (card.height || 200) + 'px';
             }
             
-            // Apply card color to entire card background (lighter version)
+            // Apply card color to entire card background (opaque version)
             if (card.color) {
-                div.style.background = colorWithAlpha(card.color, 0.15);
-                div.style.borderColor = colorWithAlpha(card.color, 0.4);
+                div.style.background = mixWithBase(card.color, CARD_BASE_COLOR, 0.15);
+                div.style.borderColor = mixWithBase(card.color, CARD_BASE_COLOR, 0.4);
             }
 
             // Header - only show filename, not full path
@@ -1117,7 +1163,7 @@ const vscode = acquireVsCodeApi();
             
             // Apply card color to header (slightly more opaque)
             if (card.color) {
-                header.style.background = colorWithAlpha(card.color, 0.35);
+                header.style.background = mixWithBase(card.color, CARD_BASE_COLOR, 0.35);
             }
             
             // Collapse toggle triangle
@@ -1519,6 +1565,16 @@ const vscode = acquireVsCodeApi();
             document.getElementById('linkFileMenu').parentElement.style.display = 'none';
             // Show card-specific actions (Rename, Move)
             document.getElementById('cardActionsSection').style.display = 'block';
+            
+            // Highlight active color
+            const card = cards.find(c => c.id === cardId);
+            document.querySelectorAll('.color-option').forEach(el => {
+                if (card && card.color && el.dataset.color === card.color) {
+                    el.classList.add('active');
+                } else {
+                    el.classList.remove('active');
+                }
+            });
             
             let x = e.pageX;
             let y = e.pageY;

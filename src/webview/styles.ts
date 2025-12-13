@@ -251,6 +251,26 @@ export const whiteboardStyles = `
             margin-top: 8px;
         }
 
+        .context-menu-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .reset-color-icon {
+            cursor: pointer;
+            color: #666;
+            margin-right: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s ease;
+        }
+
+        .reset-color-icon:hover {
+            color: #ccc;
+        }
+
         .context-menu-label {
             font-size: 11px;
             color: #666;
@@ -302,6 +322,12 @@ export const whiteboardStyles = `
             transform: scale(1.15);
             border-color: rgba(255, 255, 255, 0.5);
             z-index: 10;
+        }
+
+        .color-option.active {
+            border-color: #ffffff;
+            border-width: 2px;
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
         }
 
         /* Modal */
