@@ -3289,6 +3289,22 @@ const vscode = acquireVsCodeApi();
             // Add event listeners for stash items
             stashListElem.querySelectorAll('.stash-item').forEach(item => {
                 const stashId = item.dataset.stashId;
+                const stashItem = stashCards.find(s => s.id === stashId);
+                
+                // Click handler for Cmd+click and Option+click to open file
+                item.addEventListener('click', (e) => {
+                    // Don't trigger if clicking on action buttons
+                    if (e.target.closest('.stash-item-actions')) return;
+                    
+                    if (e.metaKey && stashItem) {
+                        // Cmd+click: Open file in full screen (not split view)
+                        vscode.postMessage({ command: 'openFile', filePath: stashItem.filePath, splitView: false });
+                    } else if (e.altKey && stashItem) {
+                        // Option+click: Open file in split view (side panel)
+                        vscode.postMessage({ command: 'openFile', filePath: stashItem.filePath, splitView: true });
+                    }
+                    // Regular click: no action (user can use restore button)
+                });
                 
                 item.querySelector('.restore').addEventListener('click', (e) => {
                     e.stopPropagation();
