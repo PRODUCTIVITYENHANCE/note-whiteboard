@@ -1,12 +1,16 @@
 {
-    "name": "whiteboard-canvas",
-    "displayName": "Whiteboard Canvas",
+    "name": "vscode-canva",
+    "displayName": "VS Code Canva",
     "description": "A whiteboard canvas for visualizing and managing markdown files",
     "version": "1.0.0",
-    "publisher": "your-publisher-name",
+    "publisher": "panpan",
+    "author": {
+        "name": "Pan Pan"
+    },
+    "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "https://github.com/your-username/whiteboard-canvas.git"
+        "url": "https://github.com/PRODUCTIVITYENHANCE/vscodecanva.git"
     },
     "engines": {
         "vscode": "^1.74.0"
