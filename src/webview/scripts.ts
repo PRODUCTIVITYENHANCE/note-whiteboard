@@ -2585,6 +2585,36 @@ const vscode = acquireVsCodeApi();
                 return;
             }
             
+            // Handle Cmd/Ctrl + Plus/Minus for zoom (prevent VS Code native zoom)
+            if ((e.metaKey || e.ctrlKey) && !e.shiftKey) {
+                // Cmd + (Equal/NumpadAdd) = Zoom In
+                if (e.code === 'Equal' || e.code === 'NumpadAdd') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setZoom(zoomLevel + 0.1, null, null, true);
+                    return;
+                }
+                // Cmd - (Minus/NumpadSubtract) = Zoom Out
+                if (e.code === 'Minus' || e.code === 'NumpadSubtract') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setZoom(zoomLevel - 0.1, null, null, true);
+                    return;
+                }
+                // Cmd 0 = Reset Zoom
+                if (e.code === 'Digit0' || e.code === 'Numpad0') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    whiteboard.style.transition = 'transform 0.3s ease-out';
+                    setZoom(1, null, null, false);
+                    centerWhiteboard();
+                    setTimeout(() => {
+                        whiteboard.style.transition = '';
+                    }, 300);
+                    return;
+                }
+            }
+            
             // Skip other keyboard shortcuts if editing text
             if (isEditing) {
                 return;
