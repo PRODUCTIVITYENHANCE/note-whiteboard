@@ -1262,14 +1262,21 @@ const vscode = acquireVsCodeApi();
                 y: y,
                 width: 300,
                 height: 200,
-                filePath: filePath
+                filePath: filePath,
+                lastModified: Date.now() // Add timestamp for proper sorting in list
             };
             cards.push(card);
             const element = createCardElement(card);
             whiteboard.appendChild(element);
             vscode.postMessage({ command: 'readCardContent', cardId: card.id, filePath: card.filePath });
             saveState();
+            
+            // Update sidebar card list if visible
+            if (panelCards.classList.contains('active')) {
+                renderCardList();
+            }
         }
+
 
         function showCardContextMenu(e, cardId) {
             contextCardId = cardId;
@@ -1784,6 +1791,11 @@ const vscode = acquireVsCodeApi();
                 contextCardId = null;
                 forceSave(); // Use forceSave for delete operations
                 hideContextMenu();
+                
+                // Update sidebar card list if visible
+                if (panelCards.classList.contains('active')) {
+                    renderCardList();
+                }
             } else {
                 deleteBlock();
             }
@@ -2035,6 +2047,8 @@ const vscode = acquireVsCodeApi();
         function deleteSelectedItems() {
             if (selectedBlocks.size === 0 && selectedCards.size === 0) return;
             
+            const hadSelectedCards = selectedCards.size > 0;
+            
             // Delete selected blocks
             selectedBlocks.forEach(blockId => {
                 blocks = blocks.filter(b => b.id !== blockId);
@@ -2063,7 +2077,13 @@ const vscode = acquireVsCodeApi();
             
             // Force save immediately for delete operations
             forceSave();
+            
+            // Update sidebar card list if cards were deleted and panel is visible
+            if (hadSelectedCards && panelCards.classList.contains('active')) {
+                renderCardList();
+            }
         }
+
 
         document.addEventListener('keyup', (e) => {
             if (e.code === 'Space') {
