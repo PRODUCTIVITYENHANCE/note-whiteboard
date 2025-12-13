@@ -142,6 +142,16 @@ export class WhiteboardPanel {
                         const folderPath = this._getCardFolderPath();
                         this._panel.webview.postMessage({ command: 'cardFolderPath', path: folderPath });
                         break;
+                    case 'renameCard':
+                        await this._renameCard(message.cardId, message.oldPath, message.newName);
+                        break;
+                    case 'moveCard':
+                        await this._moveCard(message.cardId, message.oldPath, message.targetFolder);
+                        break;
+                    case 'getWorkspaceFolders':
+                        const folders = await this._getWorkspaceFolders();
+                        this._panel.webview.postMessage({ command: 'workspaceFolders', folders });
+                        break;
                 }
             },
             null,
@@ -491,6 +501,149 @@ export class WhiteboardPanel {
         } catch (error) {
             vscode.window.showErrorMessage(`Error creating file: ${error}`);
         }
+    }
+
+    private async _renameCard(cardId: string, oldPath: string, newName: string) {
+        try {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders) {
+                vscode.window.showErrorMessage('No workspace folder open');
+                return;
+            }
+
+            const workspaceRoot = workspaceFolders[0].uri.fsPath;
+
+            // Get full old path
+            const oldFullPath = path.isAbsolute(oldPath)
+                ? oldPath
+                : path.join(workspaceRoot, oldPath);
+
+            // Ensure .md extension
+            let finalNewName = newName;
+            if (!finalNewName.endsWith('.md')) {
+                finalNewName += '.md';
+            }
+
+            // Build new path (same directory as old path)
+            const oldDir = path.dirname(oldFullPath);
+            const newFullPath = path.join(oldDir, finalNewName);
+            const newRelativePath = path.relative(workspaceRoot, newFullPath);
+
+            // Check if source file exists
+            if (!fs.existsSync(oldFullPath)) {
+                vscode.window.showErrorMessage(`File not found: ${oldPath}`);
+                return;
+            }
+
+            // Check if target file already exists
+            if (fs.existsSync(newFullPath)) {
+                vscode.window.showErrorMessage(`File already exists: ${newRelativePath}`);
+                return;
+            }
+
+            // Rename the file
+            fs.renameSync(oldFullPath, newFullPath);
+
+            // Notify webview about successful rename
+            this._panel.webview.postMessage({
+                command: 'cardRenamed',
+                cardId: cardId,
+                oldPath: oldPath,
+                newPath: newRelativePath
+            });
+
+            vscode.window.showInformationMessage(`Renamed to: ${finalNewName}`);
+
+        } catch (error) {
+            vscode.window.showErrorMessage(`Error renaming file: ${error}`);
+        }
+    }
+
+    private async _moveCard(cardId: string, oldPath: string, targetFolder: string) {
+        try {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders) {
+                vscode.window.showErrorMessage('No workspace folder open');
+                return;
+            }
+
+            const workspaceRoot = workspaceFolders[0].uri.fsPath;
+
+            // Get full old path
+            const oldFullPath = path.isAbsolute(oldPath)
+                ? oldPath
+                : path.join(workspaceRoot, oldPath);
+
+            // Get filename
+            const fileName = path.basename(oldFullPath);
+
+            // Build new path
+            const targetDir = path.join(workspaceRoot, targetFolder);
+            const newFullPath = path.join(targetDir, fileName);
+            const newRelativePath = path.join(targetFolder, fileName);
+
+            // Check if source file exists
+            if (!fs.existsSync(oldFullPath)) {
+                vscode.window.showErrorMessage(`File not found: ${oldPath}`);
+                return;
+            }
+
+            // Create target directory if not exists
+            if (!fs.existsSync(targetDir)) {
+                fs.mkdirSync(targetDir, { recursive: true });
+            }
+
+            // Check if target file already exists
+            if (fs.existsSync(newFullPath)) {
+                vscode.window.showErrorMessage(`File already exists in target folder: ${newRelativePath}`);
+                return;
+            }
+
+            // Move the file
+            fs.renameSync(oldFullPath, newFullPath);
+
+            // Notify webview about successful move
+            this._panel.webview.postMessage({
+                command: 'cardMoved',
+                cardId: cardId,
+                oldPath: oldPath,
+                newPath: newRelativePath
+            });
+
+            vscode.window.showInformationMessage(`Moved to: ${targetFolder}`);
+
+        } catch (error) {
+            vscode.window.showErrorMessage(`Error moving file: ${error}`);
+        }
+    }
+
+    private async _getWorkspaceFolders(): Promise<string[]> {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders) {
+            return [];
+        }
+
+        const workspaceRoot = workspaceFolders[0].uri.fsPath;
+        const folders: string[] = ['']; // Include root as empty string
+
+        // Recursively find all directories
+        const findDirs = (dir: string, relativePath: string = '') => {
+            try {
+                const entries = fs.readdirSync(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                    if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+                        const relPath = relativePath ? path.join(relativePath, entry.name) : entry.name;
+                        folders.push(relPath);
+                        findDirs(path.join(dir, entry.name), relPath);
+                    }
+                }
+            } catch (error) {
+                // Ignore permission errors
+            }
+        };
+
+        findDirs(workspaceRoot);
+        return folders.sort();
     }
 
     private _saveState(state: WhiteboardState) {
@@ -1367,6 +1520,16 @@ export class WhiteboardPanel {
                 <span>Unlink file</span>
             </div>
         </div>
+        <div class="context-menu-section" id="cardActionsSection" style="display: none;">
+            <div class="context-menu-item" id="renameCardMenu">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg>
+                <span>Rename</span>
+            </div>
+            <div class="context-menu-item" id="moveCardMenu">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"></path></svg>
+                <span>Move to...</span>
+            </div>
+        </div>
         <div class="context-menu-section">
             <div class="context-menu-item danger" id="deleteBlockMenu">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
@@ -1413,6 +1576,29 @@ export class WhiteboardPanel {
         </div>
     </div>
 
+    <!-- Rename Card Modal -->
+    <div class="modal-overlay" id="renameCardModal">
+        <div class="modal">
+            <h3><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg> Rename Card</h3>
+            <input type="text" class="modal-input" id="renameCardInput" placeholder="Enter new filename">
+            <div class="modal-actions">
+                <button class="modal-btn" id="confirmRenameBtn">Rename</button>
+                <button class="modal-btn" id="closeRenameModal" style="background: transparent; border: 1px solid #333;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Move Card Modal (Folder Selector) -->
+    <div class="modal-overlay" id="moveCardModal">
+        <div class="modal">
+            <h3><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"></path></svg> Move to Folder</h3>
+            <input type="text" class="file-search-input" id="folderSearchInput" placeholder="搜尋資料夾...">
+            <div class="file-list-container">
+                <div class="file-list" id="folderList"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Drop Indicator -->
     <div class="drop-indicator" id="dropIndicator">
         <span><svg class="icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M12 18v-6"></path><path d="m9 15 3 3 3-3"></path></svg> Drop .md file to create card</span>
@@ -1429,6 +1615,9 @@ export class WhiteboardPanel {
         const colorGrid = document.getElementById('colorGrid');
         const newCardModal = document.getElementById('newCardModal');
         const dropIndicator = document.getElementById('dropIndicator');
+        const renameCardModal = document.getElementById('renameCardModal');
+        const moveCardModal = document.getElementById('moveCardModal');
+        const folderList = document.getElementById('folderList');
         
         let blocks = [];
         let cards = [];
@@ -1460,6 +1649,15 @@ export class WhiteboardPanel {
         let isDirty = false;
         let lastSavedState = null;
         const SAVE_DEBOUNCE_MS = 500;
+        // ========================================
+
+        // ========== Rename/Move State ==========
+        let renameTargetCardId = null;
+        let renameTargetPath = null;
+        let moveTargetCardId = null;
+        let moveTargetPath = null;
+        let allWorkspaceFolders = [];
+        let filteredFolders = [];
         // ========================================
 
         // Colors palette - 8 deep colors for white text visibility
@@ -2531,15 +2729,17 @@ export class WhiteboardPanel {
 
         function showCardContextMenu(e, cardId) {
             contextCardId = cardId;
-            // Reuse block context menu but hide color options
+            // Reuse block context menu but hide color options and link options
             const colorSection = contextMenu.querySelector('.context-menu-section');
             colorSection.style.display = 'none';
             document.getElementById('linkFileMenu').parentElement.style.display = 'none';
+            // Show card-specific actions (Rename, Move)
+            document.getElementById('cardActionsSection').style.display = 'block';
             
             let x = e.pageX;
             let y = e.pageY;
             if (x + 220 > window.innerWidth) x -= 220;
-            if (y + 100 > window.innerHeight) y -= 100;
+            if (y + 150 > window.innerHeight) y -= 150;
             
             contextMenu.style.left = x + 'px';
             contextMenu.style.top = y + 'px';
@@ -2599,6 +2799,97 @@ export class WhiteboardPanel {
                 });
             }
             closeNewCardModal();
+        }
+
+        // ========== Rename Card Functions ==========
+        function openRenameModal(cardId, filePath) {
+            renameTargetCardId = cardId;
+            renameTargetPath = filePath;
+            
+            // Pre-fill with current filename (without extension)
+            const currentName = filePath.split('/').pop().replace('.md', '');
+            const input = document.getElementById('renameCardInput');
+            input.value = currentName;
+            
+            renameCardModal.classList.add('active');
+            input.focus();
+            input.select();
+        }
+
+        function closeRenameModal() {
+            renameCardModal.classList.remove('active');
+            renameTargetCardId = null;
+            renameTargetPath = null;
+        }
+
+        function confirmRename() {
+            const newName = document.getElementById('renameCardInput').value.trim();
+            if (!newName || !renameTargetCardId || !renameTargetPath) return;
+            
+            vscode.postMessage({
+                command: 'renameCard',
+                cardId: renameTargetCardId,
+                oldPath: renameTargetPath,
+                newName: newName
+            });
+            
+            closeRenameModal();
+        }
+
+        // ========== Move Card Functions ==========
+        function openMoveModal(cardId, filePath) {
+            moveTargetCardId = cardId;
+            moveTargetPath = filePath;
+            
+            // Request folder list from extension
+            vscode.postMessage({ command: 'getWorkspaceFolders' });
+            
+            moveCardModal.classList.add('active');
+            document.getElementById('folderSearchInput').value = '';
+            document.getElementById('folderSearchInput').focus();
+        }
+
+        function closeMoveModal() {
+            moveCardModal.classList.remove('active');
+            moveTargetCardId = null;
+            moveTargetPath = null;
+            allWorkspaceFolders = [];
+            filteredFolders = [];
+        }
+
+        function renderFolderList(folders) {
+            folderList.innerHTML = '';
+            folders.forEach((folder, index) => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                item.innerHTML = \`
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"></path></svg>
+                    <span>\${folder === '' ? '/ (根目錄)' : folder}</span>
+                \`;
+                item.addEventListener('click', () => selectFolder(folder));
+                folderList.appendChild(item);
+            });
+        }
+
+        function filterFolders(query) {
+            const lowerQuery = query.toLowerCase();
+            filteredFolders = allWorkspaceFolders.filter(f => 
+                f.toLowerCase().includes(lowerQuery) || (f === '' && '根目錄'.includes(lowerQuery))
+            );
+            renderFolderList(filteredFolders);
+        }
+
+        function selectFolder(folder) {
+            if (!moveTargetCardId || !moveTargetPath) return;
+            
+            vscode.postMessage({
+                command: 'moveCard',
+                cardId: moveTargetCardId,
+                oldPath: moveTargetPath,
+                targetFolder: folder
+            });
+            
+            closeMoveModal();
         }
 
         // Message handling
@@ -2724,6 +3015,44 @@ export class WhiteboardPanel {
                         saveState();
                     }
                     break;
+                case 'cardRenamed':
+                    // Card was renamed via context menu
+                    const cardToRename = cards.find(c => c.id === message.cardId);
+                    if (cardToRename) {
+                        cardToRename.filePath = message.newPath;
+                        // Update the filename display in the header
+                        const cardEl = document.getElementById(message.cardId);
+                        if (cardEl) {
+                            const filenameSpan = cardEl.querySelector('.filename');
+                            if (filenameSpan) {
+                                filenameSpan.textContent = getFileName(message.newPath);
+                            }
+                        }
+                        saveState();
+                    }
+                    break;
+                case 'cardMoved':
+                    // Card was moved to another folder via context menu
+                    const cardToMove = cards.find(c => c.id === message.cardId);
+                    if (cardToMove) {
+                        cardToMove.filePath = message.newPath;
+                        // Update the filename display (path may have changed)
+                        const movedCardEl = document.getElementById(message.cardId);
+                        if (movedCardEl) {
+                            const filenameSpan = movedCardEl.querySelector('.filename');
+                            if (filenameSpan) {
+                                filenameSpan.textContent = getFileName(message.newPath);
+                            }
+                        }
+                        saveState();
+                    }
+                    break;
+                case 'workspaceFolders':
+                    // Received folder list for move modal
+                    allWorkspaceFolders = message.folders;
+                    filteredFolders = message.folders;
+                    renderFolderList(message.folders);
+                    break;
             }
         });
 
@@ -2745,6 +3074,25 @@ export class WhiteboardPanel {
         });
         document.getElementById('linkFileMenu').addEventListener('click', () => openFileSelector());
         document.getElementById('unlinkFileMenu').addEventListener('click', unlinkFile);
+
+        // Card-specific context menu actions
+        document.getElementById('renameCardMenu').addEventListener('click', () => {
+            if (!contextCardId) return;
+            const card = cards.find(c => c.id === contextCardId);
+            if (card) {
+                openRenameModal(card.id, card.filePath);
+            }
+            hideContextMenu();
+        });
+
+        document.getElementById('moveCardMenu').addEventListener('click', () => {
+            if (!contextCardId) return;
+            const card = cards.find(c => c.id === contextCardId);
+            if (card) {
+                openMoveModal(card.id, card.filePath);
+            }
+            hideContextMenu();
+        });
 
         // Canvas context menu
         document.getElementById('addBlockFromMenu').addEventListener('click', () => {
@@ -2773,6 +3121,32 @@ export class WhiteboardPanel {
             }
         });
 
+        // Rename card modal
+        document.getElementById('confirmRenameBtn').addEventListener('click', confirmRename);
+        document.getElementById('closeRenameModal').addEventListener('click', closeRenameModal);
+        document.getElementById('renameCardInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') confirmRename();
+            if (e.key === 'Escape') closeRenameModal();
+        });
+        document.getElementById('renameCardModal').addEventListener('click', (e) => {
+            if (e.target.id === 'renameCardModal') {
+                closeRenameModal();
+            }
+        });
+
+        // Move card modal
+        document.getElementById('folderSearchInput').addEventListener('input', (e) => {
+            filterFolders(e.target.value);
+        });
+        document.getElementById('folderSearchInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeMoveModal();
+        });
+        document.getElementById('moveCardModal').addEventListener('click', (e) => {
+            if (e.target.id === 'moveCardModal') {
+                closeMoveModal();
+            }
+        });
+
         // Escape key to close modals
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -2781,6 +3155,12 @@ export class WhiteboardPanel {
                 }
                 if (newCardModal.classList.contains('active')) {
                     closeNewCardModal();
+                }
+                if (renameCardModal.classList.contains('active')) {
+                    closeRenameModal();
+                }
+                if (moveCardModal.classList.contains('active')) {
+                    closeMoveModal();
                 }
             }
         });
@@ -2938,6 +3318,9 @@ export class WhiteboardPanel {
                 if (colorSection) colorSection.style.display = '';
                 const linkSection = document.getElementById('linkFileMenu');
                 if (linkSection && linkSection.parentElement) linkSection.parentElement.style.display = '';
+                // Hide card-specific actions
+                const cardActionsSection = document.getElementById('cardActionsSection');
+                if (cardActionsSection) cardActionsSection.style.display = 'none';
                 contextCardId = null;
             }
             if (!canvasContextMenu.contains(e.target)) {

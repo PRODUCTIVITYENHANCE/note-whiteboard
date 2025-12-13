@@ -21,6 +21,9 @@ export declare class WhiteboardPanel {
     private _saveCardContent;
     private _getCardFolderPath;
     private _createNewCard;
+    private _renameCard;
+    private _moveCard;
+    private _getWorkspaceFolders;
     private _saveState;
     private _loadState;
     /**
