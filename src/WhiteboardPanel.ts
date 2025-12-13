@@ -419,9 +419,29 @@ export class WhiteboardPanel {
         }
     }
 
-    private async _getMarkdownFiles(): Promise<string[]> {
+    private async _getMarkdownFiles(): Promise<{ path: string; mtime: number }[]> {
         const files = await vscode.workspace.findFiles('**/*.md', '**/node_modules/**', 100);
-        return files.map(f => vscode.workspace.asRelativePath(f));
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+
+        const filesWithMtime = files.map(f => {
+            const relativePath = vscode.workspace.asRelativePath(f);
+            let mtime = 0;
+            try {
+                const fullPath = workspaceFolders
+                    ? path.join(workspaceFolders[0].uri.fsPath, relativePath)
+                    : f.fsPath;
+                const stat = fs.statSync(fullPath);
+                mtime = stat.mtime.getTime();
+            } catch (error) {
+                // Ignore errors, use 0 as default
+            }
+            return { path: relativePath, mtime };
+        });
+
+        // Sort by mtime descending (newest first)
+        filesWithMtime.sort((a, b) => b.mtime - a.mtime);
+
+        return filesWithMtime;
     }
 
     private async _readCardContent(cardId: string, filePath: string) {

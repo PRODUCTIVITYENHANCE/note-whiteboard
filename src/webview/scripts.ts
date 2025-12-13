@@ -466,7 +466,7 @@ const vscode = acquireVsCodeApi();
         }
 
         // File selector state
-        let allWorkspaceFiles = [];
+        let allWorkspaceFiles = []; // Array of { path: string, mtime: number }
         let selectedFileIndex = -1;
         let filteredFiles = [];
         let fileSelectorMode = 'block'; // 'block' for linking to block, 'card' for creating new card
@@ -509,9 +509,10 @@ const vscode = acquireVsCodeApi();
             if (files.length === 0) {
                 fileList.innerHTML = '<div class="no-results">找不到符合的檔案</div>';
             } else {
-                fileList.innerHTML = files.map((f, i) => 
-                    \`<div class="file-item\${i === selectedFileIndex ? ' selected' : ''}" data-file="\${f}" data-index="\${i}">\${f}</div>\`
-                ).join('');
+                fileList.innerHTML = files.map((f, i) => {
+                    const filePath = typeof f === 'string' ? f : f.path;
+                    return \`<div class="file-item\${i === selectedFileIndex ? ' selected' : ''}" data-file="\${filePath}" data-index="\${i}">\${filePath}</div>\`;
+                }).join('');
                 fileList.querySelectorAll('.file-item').forEach(item => {
                     item.addEventListener('click', () => selectFile(item.dataset.file));
                 });
@@ -554,7 +555,10 @@ const vscode = acquireVsCodeApi();
 
         function filterFiles(query) {
             const q = query.toLowerCase();
-            const filtered = allWorkspaceFiles.filter(f => f.toLowerCase().includes(q));
+            const filtered = allWorkspaceFiles.filter(f => {
+                const filePath = typeof f === 'string' ? f : f.path;
+                return filePath.toLowerCase().includes(q);
+            });
             
             // If no matching files and there's a query, auto-select the "Create" option
             if (filtered.length === 0 && query.trim()) {
@@ -595,7 +599,8 @@ const vscode = acquireVsCodeApi();
             } else if (e.key === 'Enter') {
                 e.preventDefault();
                 if (selectedFileIndex >= 0 && selectedFileIndex < filteredFiles.length) {
-                    selectFile(filteredFiles[selectedFileIndex]);
+                    const file = filteredFiles[selectedFileIndex];
+                    selectFile(typeof file === 'string' ? file : file.path);
                 } else if (selectedFileIndex === filteredFiles.length) {
                     // New File selected
                     handleNewFileClick();
