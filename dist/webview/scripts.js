@@ -1167,7 +1167,11 @@ const vscode = acquireVsCodeApi();
                 showCardContextMenu(e, card.id);
             });
 
+            // Enable HTML5 drag & drop to stash
+            enableCardDragToStash(div, card);
+
             return div;
+
         }
 
         function startCardDrag(e, element, card) {
@@ -2187,18 +2191,14 @@ const vscode = acquireVsCodeApi();
         }
         
         /**
-         * Toggle sidebar open/close
+         * Toggle sidebar open/close (overlay mode - doesn't push canvas)
          */
         function toggleSidebar() {
             sidebarOpen = !sidebarOpen;
             if (sidebarOpen) {
                 sidebar.classList.add('open');
-                toolbar.classList.add('sidebar-open');
-                canvasContainer.classList.add('sidebar-open');
             } else {
                 sidebar.classList.remove('open');
-                toolbar.classList.remove('sidebar-open');
-                canvasContainer.classList.remove('sidebar-open');
             }
         }
         

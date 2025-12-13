@@ -876,13 +876,16 @@ export const whiteboardStyles = `
             top: 0;
             width: 320px;
             height: 100vh;
-            background: #0d0d0d;
+            background: rgba(13, 13, 13, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             border-right: 1px solid #333;
             z-index: 1001;
             display: flex;
             flex-direction: column;
             transform: translateX(-100%);
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
         }
 
         #sidebar.open {
@@ -1257,14 +1260,5 @@ export const whiteboardStyles = `
             font-size: 13px;
         }
 
-        /* Adjust toolbar when sidebar is open */
-        #toolbar.sidebar-open {
-            left: 336px;
-        }
-
-        /* Adjust canvas container when sidebar is open */
-        #canvas-container.sidebar-open {
-            margin-left: 320px;
-            width: calc(100% - 320px);
-        }
+        /* Sidebar is now overlay, no need to adjust toolbar or canvas */
 `;
