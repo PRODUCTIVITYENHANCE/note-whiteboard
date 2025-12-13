@@ -1,1 +1,8 @@
 node_modules
+dist
+out
+*.vsix
+.DS_Store
+test
+.agent
+.vscode-test
