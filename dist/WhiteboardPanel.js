@@ -638,7 +638,7 @@ class WhiteboardPanel {
                 linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
             background-size: 40px 40px;
             transform-origin: 0 0;
-            transition: transform 0.05s ease-out; /* Smooth transition for zoom */
+            /* Note: No transition here - causes panning lag */
         }
 
         .block {
@@ -1465,7 +1465,9 @@ class WhiteboardPanel {
             });
 
             // Click on text content to open linked file (only text area, not surrounding space)
-            // Normal click: open in main view, Option+click: open in split view
+            // Cmd+click (Mac) or Ctrl+click (Win): open file in main view
+            // Option+click (Mac) or Alt+click (Win): open file in split view
+            // Cmd+Option+click: also open in split view
             contentDiv.addEventListener('click', (e) => {
                 if (div.classList.contains('editing')) return;
                 
@@ -1473,6 +1475,9 @@ class WhiteboardPanel {
                 if (draggedBlock) return;
 
                 if (block.linkedFile) {
+                    // Require Cmd/Ctrl OR Option/Alt to open file - prevents accidental opens
+                    if (!e.metaKey && !e.ctrlKey && !e.altKey) return;
+                    
                     e.preventDefault();
                     e.stopPropagation();
                     const splitView = e.altKey;
@@ -1495,8 +1500,10 @@ class WhiteboardPanel {
                     e.stopPropagation();
                     toggleBlockSelection(block.id, true);
                 } else {
-                    // Normal click - clear selection and start single drag
+                    // Normal click - select this item and start single drag
                     clearSelection();
+                    selectedBlocks.add(block.id);
+                    div.classList.add('selected');
                     startDrag(e, div, block);
                 }
             });
@@ -2209,7 +2216,7 @@ class WhiteboardPanel {
             collapseToggle.title = card.collapsed ? 'Expand' : 'Collapse';
             header.appendChild(collapseToggle);
             
-            // File icon - also clickable
+            // File icon - clickable to open file (requires Cmd/Ctrl)
             const fileIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             fileIcon.setAttribute('class', 'icon-sm');
             fileIcon.setAttribute('viewBox', '0 0 24 24');
@@ -2221,6 +2228,9 @@ class WhiteboardPanel {
             fileIcon.innerHTML = '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line>';
             fileIcon.style.cursor = 'pointer';
             fileIcon.addEventListener('click', (e) => {
+                // Require Cmd/Ctrl OR Option/Alt to open file - prevents accidental opens
+                if (!e.metaKey && !e.ctrlKey && !e.altKey) return;
+                
                 e.preventDefault();
                 e.stopPropagation();
                 const splitView = e.altKey;
@@ -2228,16 +2238,19 @@ class WhiteboardPanel {
             });
             header.appendChild(fileIcon);
             
-            // Filename - clickable to open file
+            // Filename - clickable to open file (requires Cmd/Ctrl)
             const displayName = getFileName(card.filePath);
             const filenameSpan = document.createElement('span');
             filenameSpan.className = 'filename';
             filenameSpan.textContent = displayName;
             filenameSpan.style.cursor = 'pointer';
-            filenameSpan.title = 'Click to open, Option+click for split view';
+            filenameSpan.title = 'Cmd+click or Option+click to open file';
             
-            // Click on filename to open file
+            // Click on filename to open file (requires Cmd/Ctrl OR Option/Alt)
             filenameSpan.addEventListener('click', (e) => {
+                // Require Cmd/Ctrl OR Option/Alt to open file - prevents accidental opens
+                if (!e.metaKey && !e.ctrlKey && !e.altKey) return;
+                
                 e.preventDefault();
                 e.stopPropagation();
                 const splitView = e.altKey;
@@ -2319,8 +2332,10 @@ class WhiteboardPanel {
                     e.stopPropagation();
                     toggleCardSelection(card.id, true);
                 } else {
-                    // Normal click - clear selection and start single drag
+                    // Normal click - select this item and start single drag
                     clearSelection();
+                    selectedCards.add(card.id);
+                    div.classList.add('selected');
                     startCardDrag(e, div, card);
                 }
             });
@@ -2768,11 +2783,59 @@ class WhiteboardPanel {
         // Also support Space+drag for panning (like in design tools)
         let spacePressed = false;
         document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && !e.repeat && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
+            // Skip all keyboard shortcuts if editing text
+            if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {
+                // Only handle Space for panning if not in text input
+                return;
+            }
+            
+            if (e.code === 'Space' && !e.repeat) {
                 spacePressed = true;
                 canvasContainer.style.cursor = 'grab';
             }
+            
+            // Delete/Backspace to delete selected items
+            if (e.code === 'Delete' || e.code === 'Backspace') {
+                deleteSelectedItems();
+                e.preventDefault();
+            }
         });
+
+        /**
+         * Delete all selected blocks and cards
+         */
+        function deleteSelectedItems() {
+            if (selectedBlocks.size === 0 && selectedCards.size === 0) return;
+            
+            // Delete selected blocks
+            selectedBlocks.forEach(blockId => {
+                blocks = blocks.filter(b => b.id !== blockId);
+                const element = document.getElementById(blockId);
+                if (element) {
+                    element.style.transform = 'scale(0)';
+                    element.style.opacity = '0';
+                    setTimeout(() => element.remove(), 200);
+                }
+            });
+            
+            // Delete selected cards
+            selectedCards.forEach(cardId => {
+                cards = cards.filter(c => c.id !== cardId);
+                const element = document.getElementById(cardId);
+                if (element) {
+                    element.style.transform = 'scale(0)';
+                    element.style.opacity = '0';
+                    setTimeout(() => element.remove(), 200);
+                }
+            });
+            
+            // Clear selection
+            selectedBlocks.clear();
+            selectedCards.clear();
+            
+            // Force save immediately for delete operations
+            forceSave();
+        }
 
         document.addEventListener('keyup', (e) => {
             if (e.code === 'Space') {
@@ -2878,6 +2941,21 @@ class WhiteboardPanel {
                     // Don't prevent default - allow textarea to scroll
                     e.stopPropagation();
                     return;
+                }
+                
+                // If inside an editing card, check if mouse is over the card
+                // If so, don't pan the whiteboard - this prevents accidental panning while editing
+                const editingCard = textarea.closest('.card.editing');
+                if (editingCard) {
+                    const cardRect = editingCard.getBoundingClientRect();
+                    if (e.clientX >= cardRect.left && e.clientX <= cardRect.right &&
+                        e.clientY >= cardRect.top && e.clientY <= cardRect.bottom) {
+                        // Mouse is inside editing card - don't pan unless using Ctrl/Cmd for zoom
+                        if (!e.ctrlKey && !e.metaKey) {
+                            e.preventDefault();
+                            return;
+                        }
+                    }
                 }
             }
             
