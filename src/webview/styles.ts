@@ -1058,7 +1058,7 @@ export const whiteboardStyles = `
         
         /* When panel has items, add padding to content */
         #panelStash.has-items {
-            padding: 12px;
+            padding: 0 12px 12px 12px;
         }
 
 
@@ -1082,24 +1082,26 @@ export const whiteboardStyles = `
         }
 
         .select-file-btn {
-            padding: 6px 12px;
-            background: transparent;
-            border: 1px solid #444;
+            padding: 6px 14px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #333;
             border-radius: 6px;
-            color: #888;
+            color: #ccc;
             cursor: pointer;
             font-size: 12px;
-            margin-top: 12px;
+            margin-top: 16px;
             transition: all 0.2s ease;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 6px;
         }
 
         .select-file-btn:hover {
-            background: rgba(255, 255, 255, 0.05);
-            color: #ccc;
-            border-color: #666;
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #555;
+            color: #fff;
+            transform: translateY(-1px);
         }
 
         /* Pinned file viewer - full width, full height */
@@ -1307,9 +1309,10 @@ export const whiteboardStyles = `
         /* Tab 3: Stash */
         .stash-header {
             display: flex;
-            padding: 12px;
-            border-bottom: 1px solid #333;
+            padding: 0 0 8px 0; /* Add bottom spacing to match list gap */
+            border-bottom: none;
             flex-shrink: 0;
+            width: 100%;
         }
         
         .stash-add-btn {
@@ -1318,20 +1321,21 @@ export const whiteboardStyles = `
             align-items: center;
             justify-content: center;
             gap: 8px;
-            padding: 10px 16px;
-            background: rgba(102, 126, 234, 0.1);
-            border: 1px dashed rgba(102, 126, 234, 0.5);
+            padding: 10px;
+            background: rgba(102, 126, 234, 0.08); /* Slightly more subtle */
+            border: 1px dashed rgba(102, 126, 234, 0.4);
             border-radius: 8px;
-            color: #667eea;
-            font-size: 14px;
+            color: #8b9ff5;
+            font-size: 13px;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.2s ease;
         }
         
         .stash-add-btn:hover {
-            background: rgba(102, 126, 234, 0.2);
+            background: rgba(102, 126, 234, 0.15);
             border-color: #667eea;
-            color: #8b9ff5;
+            color: #fff;
         }
         
         .stash-add-btn svg {
