@@ -1,73 +1,89 @@
 # Whiteboard Canvas
 
-A minimalist VS Code extension for visual note-taking with draggable blocks and markdown file cards - inspired by Heptabase and Obsidian Canvas.
+一款極簡風格的 VS Code 擴充套件，專為視覺化筆記設計——靈感來自 Heptabase 與 Obsidian Canvas。
 
-## Features
+## ✨ 功能特色
 
-### Blocks
-- 🎨 **Colorful Blocks**: Solid color blocks with 16 vibrant color options
-- 🖱️ **Drag & Drop**: Freely move blocks around the infinite canvas
-- 📄 **Markdown Linking**: Link blocks to `.md` files - linked blocks show as underlined text
+### 📦 Block（色塊）
+- 🎨 **多彩色塊**：提供 8 種精選深色調，白色文字清晰可讀
+- 🖱️ **自由拖曳**：在無限畫布上任意移動 Block
+- 📄 **Markdown 連結**：可將 Block 連結至 `.md` 檔案，連結後文字會顯示底線
 
-### Cards (Markdown Files)
-- 📝 **Inline Editing**: Edit `.md` files directly on the canvas - changes sync to file
-- 📂 **Drag & Drop**: Drag `.md` files from VS Code explorer onto the canvas
-- ↔️ **Resizable**: Drag the bottom-right corner to resize cards
-- ➕ **Quick Create**: Right-click canvas → "Add Card" to create new `.md` files
+### 📝 Card（Markdown 卡片）
+- ✏️ **即時編輯**：直接在畫布上編輯 `.md` 檔案，變更自動同步
+- 📂 **拖放匯入**：從 VS Code 檔案總管直接拖曳 `.md` 檔案到畫布
+- ↔️ **八方向縮放**：可從四個角落與四條邊調整卡片大小
+- ➕ **快速建立**：右鍵選單 → 「Add Card」建立新的 `.md` 檔案
 
-### Canvas Features
-- 🔍 **Zoom Controls**: Zoom in/out with mouse wheel (Ctrl/Cmd + scroll) or UI controls
-- ⚡ **Quick Creation**: Double-click canvas to instantly create a new block
-- 🎯 **Context Menu**: Right-click for options (blocks, cards, or canvas)
-- 💾 **Auto-Save**: Your whiteboard is automatically saved per workspace
-- 🌑 **Minimalist Design**: Clean black background with no gradients
+### 🖼️ 畫布功能
+- 🔍 **縮放控制**：滾輪 + Ctrl/Cmd 縮放，或使用右下角控制按鈕
+- ⚡ **快速建立**：雙擊畫布立即新增 Block
+- 🎯 **右鍵選單**：對 Block、Card 或畫布右鍵可開啟操作選單
+- 💾 **自動儲存**：白板狀態自動儲存，支援 Debounce 防抖優化
+- 🖼️ **檔案格式**：使用 `.whiteboard.json` 格式，可加入 Git 版本控制
 
-## Usage
+### 📁 側邊欄
+- 📌 **釘選檔案**：快速存取常用的 `.md` 檔案，可直接編輯
+- 📋 **卡片清單**：列出白板上所有卡片，可依顏色篩選、點擊導航
+- 📦 **暫存區**：將卡片暫存不刪除，隨時可恢復或永久移除
 
-### Blocks
-1. **Create Block**: Click ➕ button, double-click canvas, or right-click → "Add Block"
-2. **Move Block**: Click and drag anywhere on the block
-3. **Edit Text**: Double-click to enter edit mode
-4. **Change Color**: Right-click → select color from palette
-5. **Link to File**: Right-click → "Link to .md file"
+### 🎮 操作體驗
+- 🔲 **框選多選**：按住拖曳繪製選取框，批量選取 Block/Card
+- ⌨️ **Delete 快捷鍵**：按 Delete/Backspace 刪除選取項目
+- 🖱️ **防誤觸機制**：需 Cmd/Ctrl+點擊才會開啟檔案，避免拖曳時誤開
+- 🔄 **重新命名/移動**：右鍵選單可重新命名卡片或移動至其他資料夾
 
-### Cards (Markdown Files)
-1. **Create Card**: Right-click canvas → "Add Card (.md)" → enter filename
-2. **Import Card**: Drag any `.md` file from the explorer onto the canvas
-3. **Edit Content**: Click inside the card and start typing (auto-saves)
-4. **Resize Card**: Drag the bottom-right corner handle
-5. **Move Card**: Drag the header bar
+## 🚀 使用方式
 
-### Zoom & Navigation
-- **Zoom In/Out**: Hold `Ctrl` (or `Cmd` on Mac) + scroll mouse wheel
-- **Zoom Controls**: Use +/- buttons in bottom-right corner
-- **Reset Zoom**: Click ↺ button
+### Block 操作
+1. **建立 Block**：點擊 ➕ 按鈕、雙擊畫布，或右鍵 → 「Add Block」
+2. **移動 Block**：點擊拖曳即可移動
+3. **編輯文字**：雙擊進入編輯模式
+4. **更換顏色**：右鍵 → 選擇色票
+5. **連結檔案**：右鍵 → 「Link to .md file」
 
-## Settings
+### Card 操作
+1. **建立 Card**：右鍵畫布 → 「Add Card (.md)」→ 輸入檔名
+2. **匯入檔案**：從檔案總管拖曳 `.md` 檔到畫布
+3. **編輯內容**：點擊卡片內容區即可編輯（自動儲存）
+4. **調整大小**：拖曳四邊或四角的控制點
+5. **移動卡片**：拖曳標題列
 
-| Setting | Description |
-|---------|-------------|
-| `whiteboard.cardFolderPath` | Relative path for storing new card files (default: workspace root) |
+### 畫布操作
+- **縮放**：按住 `Ctrl`（Mac 為 `Cmd`）+ 滾輪
+- **平移**：
+  - 滑鼠中鍵拖曳
+  - Alt + 拖曳
+  - 空白鍵 + 拖曳
+  - Mac 觸控板雙指滑動
+- **重置視圖**：點擊右下角 ↺ 按鈕
 
-## Commands
+## ⚙️ 設定
 
-| Command | Description |
-|---------|-------------|
-| `Whiteboard: Open Whiteboard` | Opens the whiteboard canvas |
+| 設定項 | 說明 |
+|--------|------|
+| `whiteboard.cardFolderPath` | 新建卡片的儲存路徑（相對於工作區根目錄，留空使用根目錄） |
 
-## Development
+## 📝 指令
+
+| 指令 | 說明 |
+|------|------|
+| `Whiteboard: Open Whiteboard` | 開啟白板畫布 |
+| `Whiteboard: Create New Whiteboard` | 建立新的 `.whiteboard.json` 白板檔案 |
+
+## 🛠️ 開發
 
 ```bash
-# Install dependencies
+# 安裝依賴
 npm install
 
-# Compile TypeScript
+# 編譯 TypeScript
 npm run compile
 
-# Package extension
+# 打包擴充套件
 npm run package
 ```
 
-## License
+## 📄 授權
 
 MIT

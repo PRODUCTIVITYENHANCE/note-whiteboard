@@ -87,6 +87,11 @@ const vscode = acquireVsCodeApi();
         let sidebarOpen = false;
         let currentColorFilter = '';
         let cardBeingDraggedToStash = null;
+        let topZIndex = 10; // Track the highest z-index for bringing cards to front
+        
+        // Drag optimization: cache dropzone rect to avoid repeated DOM queries
+        let cachedDropzoneRect = null;
+        let isOverDropzone = false;
         // ===================================
 
         // Colors palette - 8 deep colors for white text visibility
@@ -119,8 +124,7 @@ const vscode = acquireVsCodeApi();
             const div = document.createElement('div');
             div.className = 'block' + (block.linkedFile ? ' linked' : '');
             div.id = block.id;
-            div.style.left = block.x + 'px';
-            div.style.top = block.y + 'px';
+            div.style.transform = 'translate(' + block.x + 'px, ' + block.y + 'px)';
             div.style.background = block.color;
 
             // Display Content (Div)
@@ -214,6 +218,10 @@ const vscode = acquireVsCodeApi();
             draggedBlock = { element, block };
             element.classList.add('dragging');
             
+            // Bring block to front by incrementing z-index
+            topZIndex++;
+            element.style.zIndex = topZIndex;
+            
             const rect = element.getBoundingClientRect();
             dragOffset = {
                 x: (e.clientX - rect.left) / zoomLevel,
@@ -232,8 +240,7 @@ const vscode = acquireVsCodeApi();
             const x = pos.x - dragOffset.x;
             const y = pos.y - dragOffset.y;
 
-            draggedBlock.element.style.left = x + 'px';
-            draggedBlock.element.style.top = y + 'px';
+            draggedBlock.element.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
 
             draggedBlock.block.x = x;
             draggedBlock.block.y = y;
@@ -807,6 +814,14 @@ const vscode = acquireVsCodeApi();
             isMultiDragging = true;
             multiDragStart = screenToWhiteboard(e.clientX, e.clientY);
             
+            // Cache dropzone position at drag start to avoid repeated DOM queries
+            if (sidebarOpen && selectedCards.size > 0) {
+                cachedDropzoneRect = stashDropzone.getBoundingClientRect();
+            } else {
+                cachedDropzoneRect = null;
+            }
+            isOverDropzone = false;
+            
             // Store initial positions
             initialPositions.clear();
             selectedBlocks.forEach(id => {
@@ -843,8 +858,7 @@ const vscode = acquireVsCodeApi();
                     block.y = initial.y + deltaY;
                     const el = document.getElementById(id);
                     if (el) {
-                        el.style.left = block.x + 'px';
-                        el.style.top = block.y + 'px';
+                        el.style.transform = 'translate(' + block.x + 'px, ' + block.y + 'px)';
                     }
                 }
             });
@@ -858,16 +872,65 @@ const vscode = acquireVsCodeApi();
                     card.y = initial.y + deltaY;
                     const el = document.getElementById(id);
                     if (el) {
-                        el.style.left = card.x + 'px';
-                        el.style.top = card.y + 'px';
+                        el.style.transform = 'translate(' + card.x + 'px, ' + card.y + 'px)';
                     }
                 }
             });
+            
+            // Check if hovering over stash dropzone using cached rect
+            if (cachedDropzoneRect) {
+                const nowOver = e.clientX >= cachedDropzoneRect.left && e.clientX <= cachedDropzoneRect.right &&
+                               e.clientY >= cachedDropzoneRect.top && e.clientY <= cachedDropzoneRect.bottom;
+                // Only update classList when state changes
+                if (nowOver !== isOverDropzone) {
+                    isOverDropzone = nowOver;
+                    if (nowOver) {
+                        stashDropzone.classList.add('drag-over');
+                    } else {
+                        stashDropzone.classList.remove('drag-over');
+                    }
+                }
+            }
         }
 
-        function stopMultiDrag() {
+        function stopMultiDrag(e) {
             if (isMultiDragging) {
                 isMultiDragging = false;
+                
+                // Check if dropped on stash dropzone
+                if (sidebarOpen && selectedCards.size > 0) {
+                    const dropzoneRect = stashDropzone.getBoundingClientRect();
+                    if (e.clientX >= dropzoneRect.left && e.clientX <= dropzoneRect.right &&
+                        e.clientY >= dropzoneRect.top && e.clientY <= dropzoneRect.bottom) {
+                        // Move all selected cards to stash
+                        // First restore original positions (since they were just visual during drag)
+                        selectedCards.forEach(id => {
+                            const initial = initialPositions.get(id);
+                            const card = cards.find(c => c.id === id);
+                            if (card && initial) {
+                                card.x = initial.x;
+                                card.y = initial.y;
+                            }
+                        });
+                        
+                        // Then move to stash
+                        const cardsToStash = [...selectedCards];
+                        cardsToStash.forEach(cardId => {
+                            moveCardToStash(cardId);
+                        });
+                        
+                        // Clear selection and switch to stash tab
+                        selectedCards.clear();
+                        switchTab('stash');
+                        stashDropzone.classList.remove('drag-over');
+                        initialPositions.clear();
+                        document.removeEventListener('mousemove', onMultiDrag);
+                        document.removeEventListener('mouseup', stopMultiDrag);
+                        return;
+                    }
+                }
+                
+                stashDropzone.classList.remove('drag-over');
                 initialPositions.clear();
                 saveState();
             }
@@ -989,8 +1052,7 @@ const vscode = acquireVsCodeApi();
             const div = document.createElement('div');
             div.className = 'card' + (card.collapsed ? ' collapsed' : '');
             div.id = card.id;
-            div.style.left = card.x + 'px';
-            div.style.top = card.y + 'px';
+            div.style.transform = 'translate(' + card.x + 'px, ' + card.y + 'px)';
             div.style.width = (card.width || 300) + 'px';
             if (!card.collapsed) {
                 div.style.height = (card.height || 200) + 'px';
@@ -1194,6 +1256,18 @@ const vscode = acquireVsCodeApi();
             draggedCard = { element, card };
             element.classList.add('dragging');
             
+            // Bring card to front by incrementing z-index
+            topZIndex++;
+            element.style.zIndex = topZIndex;
+            
+            // Cache dropzone position at drag start to avoid repeated DOM queries
+            if (sidebarOpen) {
+                cachedDropzoneRect = stashDropzone.getBoundingClientRect();
+            } else {
+                cachedDropzoneRect = null;
+            }
+            isOverDropzone = false;
+            
             const rect = element.getBoundingClientRect();
             dragOffset = {
                 x: (e.clientX - rect.left) / zoomLevel,
@@ -1212,15 +1286,50 @@ const vscode = acquireVsCodeApi();
             const x = pos.x - dragOffset.x;
             const y = pos.y - dragOffset.y;
 
-            draggedCard.element.style.left = x + 'px';
-            draggedCard.element.style.top = y + 'px';
+            draggedCard.element.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
 
             draggedCard.card.x = x;
             draggedCard.card.y = y;
+            
+            // Check if hovering over stash dropzone using cached rect
+            if (cachedDropzoneRect) {
+                const nowOver = e.clientX >= cachedDropzoneRect.left && e.clientX <= cachedDropzoneRect.right &&
+                               e.clientY >= cachedDropzoneRect.top && e.clientY <= cachedDropzoneRect.bottom;
+                // Only update classList when state changes
+                if (nowOver !== isOverDropzone) {
+                    isOverDropzone = nowOver;
+                    if (nowOver) {
+                        stashDropzone.classList.add('drag-over');
+                    } else {
+                        stashDropzone.classList.remove('drag-over');
+                    }
+                }
+            }
         }
 
-        function stopCardDrag() {
+        function stopCardDrag(e) {
             if (draggedCard) {
+                // Check if dropped on stash dropzone
+                if (sidebarOpen) {
+                    const dropzoneRect = stashDropzone.getBoundingClientRect();
+                    if (e.clientX >= dropzoneRect.left && e.clientX <= dropzoneRect.right &&
+                        e.clientY >= dropzoneRect.top && e.clientY <= dropzoneRect.bottom) {
+                        // Move card to stash instead of just repositioning
+                        const cardId = draggedCard.card.id;
+                        draggedCard.element.classList.remove('dragging');
+                        stashDropzone.classList.remove('drag-over');
+                        draggedCard = null;
+                        
+                        moveCardToStash(cardId);
+                        switchTab('stash');
+                        
+                        document.removeEventListener('mousemove', onCardDrag);
+                        document.removeEventListener('mouseup', stopCardDrag);
+                        return;
+                    }
+                }
+                
+                stashDropzone.classList.remove('drag-over');
                 draggedCard.element.classList.remove('dragging');
                 draggedCard = null;
                 saveState();
@@ -1297,8 +1406,7 @@ const vscode = acquireVsCodeApi();
             // Apply changes
             resizingCard.element.style.width = newW + 'px';
             resizingCard.element.style.height = newH + 'px';
-            resizingCard.element.style.left = newX + 'px';
-            resizingCard.element.style.top = newY + 'px';
+            resizingCard.element.style.transform = 'translate(' + newX + 'px, ' + newY + 'px)';
             
             resizingCard.card.width = newW;
             resizingCard.card.height = newH;
@@ -2556,7 +2664,6 @@ const vscode = acquireVsCodeApi();
                     <div class="color-dot" style="background: \${card.color || '#4b5563'}"></div>
                     <div class="card-info">
                         <div class="card-name">\${getFileName(card.filePath)}</div>
-                        <div class="card-time">\${formatTimeAgo(card.lastModified)}</div>
                     </div>
                 </div>
             \`).join('');

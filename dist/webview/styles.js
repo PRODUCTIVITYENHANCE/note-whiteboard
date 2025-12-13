@@ -120,12 +120,11 @@ exports.whiteboardStyles = `
             width: 8000px;
             height: 6000px;
             position: relative;
-            background-image: 
-                linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-            background-size: 40px 40px;
+            /* Dot grid pattern - lighter and more performant */
+            background-image: radial-gradient(circle, rgba(255,255,255,0.15) 1px, transparent 1px);
+            background-size: 24px 24px;
             transform-origin: 0 0;
-            /* Note: No transition here - causes panning lag */
+            will-change: transform;
         }
 
         .block {
@@ -142,6 +141,7 @@ exports.whiteboardStyles = `
             padding: 14px;
             text-align: center;
             border: 1px solid rgba(255, 255, 255, 0.1);
+            will-change: transform;
         }
 
         .block:hover {
@@ -606,6 +606,7 @@ exports.whiteboardStyles = `
             flex-direction: column;
             overflow: hidden;
             box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            will-change: transform;
         }
 
         .card:hover {
@@ -1006,7 +1007,7 @@ exports.whiteboardStyles = `
         .sidebar-content {
             flex: 1;
             overflow-y: auto;
-            padding: 12px;
+            padding: 0;
         }
 
         .sidebar-panel {
@@ -1017,6 +1018,12 @@ exports.whiteboardStyles = `
         .sidebar-panel.active {
             display: flex;
             flex-direction: column;
+        }
+
+        /* Tab 2 & Tab 3 need padding */
+        #panelCards,
+        #panelStash {
+            padding: 12px;
         }
 
 
@@ -1060,22 +1067,22 @@ exports.whiteboardStyles = `
             border-color: #555;
         }
 
-        /* Pinned file viewer - full width, auto height */
+        /* Pinned file viewer - full width, full height */
         .pinned-file-viewer {
             display: flex;
             flex-direction: column;
             flex: 1;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid #333;
-            border-radius: 8px;
+            background: transparent;
+            border: none;
+            border-radius: 0;
             overflow: hidden;
         }
 
         .pinned-file-header {
             display: flex;
             align-items: center;
-            padding: 10px 12px;
-            background: rgba(255, 255, 255, 0.05);
+            padding: 8px 12px;
+            background: transparent;
             border-bottom: 1px solid #333;
             gap: 8px;
             flex-shrink: 0;
@@ -1116,7 +1123,7 @@ exports.whiteboardStyles = `
 
         .pinned-file-content {
             flex: 1;
-            padding: 12px;
+            padding: 0;
             overflow-y: auto;
         }
 
@@ -1132,6 +1139,8 @@ exports.whiteboardStyles = `
             line-height: 1.6;
             resize: none;
             outline: none;
+            padding: 12px;
+            box-sizing: border-box;
         }
 
 
@@ -1197,7 +1206,8 @@ exports.whiteboardStyles = `
         }
 
         .color-filter-option.all-colors {
-            background: linear-gradient(135deg, #2563eb 0%, #dc2626 25%, #ea580c 50%, #16a34a 75%, #7c3aed 100%);
+            background: #1a1a1a;
+            border: 1px solid #444;
         }
 
 
@@ -1246,7 +1256,6 @@ exports.whiteboardStyles = `
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            margin-bottom: 4px;
         }
 
         .card-list-item .card-time {
