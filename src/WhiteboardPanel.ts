@@ -21,6 +21,7 @@ interface Card {
     width: number;
     height: number;
     filePath: string;
+    color?: string;
 }
 
 interface WhiteboardState {
@@ -541,18 +542,28 @@ export class WhiteboardPanel {
                 return;
             }
 
-            // Rename the file
-            fs.renameSync(oldFullPath, newFullPath);
+            // Use VS Code's WorkspaceEdit to rename - this triggers onDidRenameFiles properly
+            const oldUri = vscode.Uri.file(oldFullPath);
+            const newUri = vscode.Uri.file(newFullPath);
 
-            // Notify webview about successful rename
-            this._panel.webview.postMessage({
-                command: 'cardRenamed',
-                cardId: cardId,
-                oldPath: oldPath,
-                newPath: newRelativePath
-            });
+            const edit = new vscode.WorkspaceEdit();
+            edit.renameFile(oldUri, newUri);
 
-            vscode.window.showInformationMessage(`Renamed to: ${finalNewName}`);
+            const success = await vscode.workspace.applyEdit(edit);
+
+            if (success) {
+                // Notify webview about successful rename
+                this._panel.webview.postMessage({
+                    command: 'cardRenamed',
+                    cardId: cardId,
+                    oldPath: oldPath,
+                    newPath: newRelativePath
+                });
+
+                vscode.window.showInformationMessage(`Renamed to: ${finalNewName}`);
+            } else {
+                vscode.window.showErrorMessage('Failed to rename file');
+            }
 
         } catch (error) {
             vscode.window.showErrorMessage(`Error renaming file: ${error}`);
@@ -599,18 +610,28 @@ export class WhiteboardPanel {
                 return;
             }
 
-            // Move the file
-            fs.renameSync(oldFullPath, newFullPath);
+            // Use VS Code's WorkspaceEdit to move - this triggers onDidRenameFiles properly
+            const oldUri = vscode.Uri.file(oldFullPath);
+            const newUri = vscode.Uri.file(newFullPath);
 
-            // Notify webview about successful move
-            this._panel.webview.postMessage({
-                command: 'cardMoved',
-                cardId: cardId,
-                oldPath: oldPath,
-                newPath: newRelativePath
-            });
+            const edit = new vscode.WorkspaceEdit();
+            edit.renameFile(oldUri, newUri);
 
-            vscode.window.showInformationMessage(`Moved to: ${targetFolder}`);
+            const success = await vscode.workspace.applyEdit(edit);
+
+            if (success) {
+                // Notify webview about successful move
+                this._panel.webview.postMessage({
+                    command: 'cardMoved',
+                    cardId: cardId,
+                    oldPath: oldPath,
+                    newPath: newRelativePath
+                });
+
+                vscode.window.showInformationMessage(`Moved to: ${targetFolder || '/ (root)'}`);
+            } else {
+                vscode.window.showErrorMessage('Failed to move file');
+            }
 
         } catch (error) {
             vscode.window.showErrorMessage(`Error moving file: ${error}`);
@@ -1875,6 +1896,24 @@ export class WhiteboardPanel {
         }
 
         function changeBlockColor(color) {
+            if (contextCardId) {
+                // Change card color
+                const card = cards.find(c => c.id === contextCardId);
+                if (card) {
+                    card.color = color;
+                    const element = document.getElementById(contextCardId);
+                    if (element) {
+                        const header = element.querySelector('.card-header');
+                        if (header) {
+                            header.style.background = color;
+                        }
+                    }
+                    saveState();
+                }
+                hideContextMenu();
+                return;
+            }
+            
             if (!contextBlockId) return;
             const block = blocks.find(b => b.id === contextBlockId);
             if (block) {
@@ -1997,9 +2036,16 @@ export class WhiteboardPanel {
         }
 
         function filterFiles(query) {
-            selectedFileIndex = -1;
             const q = query.toLowerCase();
             const filtered = allWorkspaceFiles.filter(f => f.toLowerCase().includes(q));
+            
+            // If no matching files and there's a query, auto-select the "Create" option
+            if (filtered.length === 0 && query.trim()) {
+                selectedFileIndex = 0; // Will be set to newFileItem (filteredFiles.length = 0)
+            } else {
+                selectedFileIndex = -1;
+            }
+            
             renderFileList(filtered);
         }
 
@@ -2013,11 +2059,21 @@ export class WhiteboardPanel {
             
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                selectedFileIndex = Math.min(selectedFileIndex + 1, totalItems - 1);
+                if (selectedFileIndex >= totalItems - 1) {
+                    // At the end (Create button), wrap to input (-1)
+                    selectedFileIndex = -1;
+                } else {
+                    selectedFileIndex = selectedFileIndex + 1;
+                }
                 updateSelectedItem();
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                selectedFileIndex = Math.max(selectedFileIndex - 1, -1);
+                if (selectedFileIndex <= -1) {
+                    // At input, jump to Create button (last item)
+                    selectedFileIndex = totalItems - 1;
+                } else {
+                    selectedFileIndex = selectedFileIndex - 1;
+                }
                 updateSelectedItem();
             } else if (e.key === 'Enter') {
                 e.preventDefault();
@@ -2474,6 +2530,11 @@ export class WhiteboardPanel {
             const header = document.createElement('div');
             header.className = 'card-header';
             
+            // Apply card color if set
+            if (card.color) {
+                header.style.background = card.color;
+            }
+            
             // Collapse toggle triangle
             const collapseToggle = document.createElement('div');
             collapseToggle.className = 'card-collapse-toggle';
@@ -2729,9 +2790,10 @@ export class WhiteboardPanel {
 
         function showCardContextMenu(e, cardId) {
             contextCardId = cardId;
-            // Reuse block context menu but hide color options and link options
+            // Show color section for cards too
             const colorSection = contextMenu.querySelector('.context-menu-section');
-            colorSection.style.display = 'none';
+            colorSection.style.display = 'block';
+            // Hide link/unlink options (cards are already linked to files)
             document.getElementById('linkFileMenu').parentElement.style.display = 'none';
             // Show card-specific actions (Rename, Move)
             document.getElementById('cardActionsSection').style.display = 'block';
@@ -2739,7 +2801,7 @@ export class WhiteboardPanel {
             let x = e.pageX;
             let y = e.pageY;
             if (x + 220 > window.innerWidth) x -= 220;
-            if (y + 150 > window.innerHeight) y -= 150;
+            if (y + 280 > window.innerHeight) y -= 280;
             
             contextMenu.style.left = x + 'px';
             contextMenu.style.top = y + 'px';
