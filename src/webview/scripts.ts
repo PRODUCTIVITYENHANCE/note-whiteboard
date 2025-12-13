@@ -2473,9 +2473,9 @@ const vscode = acquireVsCodeApi();
         // ========== Sidebar Resize ==========
         const sidebarResizeHandle = document.getElementById('sidebarResizeHandle');
         let isResizingSidebar = false;
-        let sidebarStartWidth = 320;
+        let sidebarStartWidth = 260;
         let sidebarStartX = 0;
-        const MIN_SIDEBAR_WIDTH = 280;
+        const MIN_SIDEBAR_WIDTH = 220;
         const MAX_SIDEBAR_WIDTH = 600;
         
         sidebarResizeHandle.addEventListener('mousedown', (e) => {
@@ -2511,6 +2511,11 @@ const vscode = acquireVsCodeApi();
         tabPinned.addEventListener('click', () => switchTab('pinned'));
         tabCards.addEventListener('click', () => switchTab('cards'));
         tabStash.addEventListener('click', () => switchTab('stash'));
+        
+        // Stash add card button
+        document.getElementById('stashAddCard').addEventListener('click', () => {
+            openFileSelector(null, 'card');
+        });
         
         // ========== Tab 1: Pinned Files ==========
         
@@ -2682,11 +2687,22 @@ const vscode = acquireVsCodeApi();
                 </div>
             \`).join('');
             
-            // Add click listeners to navigate to card
+            // Add click listeners to navigate to card or open file
             cardListElem.querySelectorAll('.card-list-item').forEach(item => {
-                item.addEventListener('click', () => {
+                item.addEventListener('click', (e) => {
                     const cardId = item.dataset.cardId;
-                    navigateToCard(cardId);
+                    const card = cards.find(c => c.id === cardId);
+                    
+                    if (e.metaKey && card) {
+                        // Cmd+click: Open file in full screen (not split view)
+                        vscode.postMessage({ command: 'openFile', filePath: card.filePath, splitView: false });
+                    } else if (e.altKey && card) {
+                        // Option+click: Open file in split view (side panel)
+                        vscode.postMessage({ command: 'openFile', filePath: card.filePath, splitView: true });
+                    } else {
+                        // Regular click: Navigate to card on whiteboard
+                        navigateToCard(cardId);
+                    }
                 });
                 
                 // Add drag listener for stash

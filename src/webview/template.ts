@@ -73,6 +73,15 @@ export const whiteboardTemplate = `
 
             <!-- Tab 3: Stash -->
             <div class="sidebar-panel" id="panelStash">
+                <div class="stash-header">
+                    <button class="stash-add-btn" id="stashAddCard" title="Select or Create Card">
+                        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        <span>Add Card</span>
+                    </button>
+                </div>
                 <div class="stash-dropzone" id="stashDropzone">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
