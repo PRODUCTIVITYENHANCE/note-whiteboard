@@ -104,6 +104,17 @@ const vscode = acquireVsCodeApi();
         let pendingMultiDragUpdate = false;
         // ======================================
 
+        // ========== Undo/Redo State ==========
+        // Tracks position changes for blocks and cards
+        // Each action is: { type: 'move'|'multiMove', items: [{ id, type: 'block'|'card', before: {x,y}, after: {x,y} }] }
+        let undoStack = [];
+        let redoStack = [];
+        const MAX_UNDO_HISTORY = 50;
+        
+        // Temporary storage for positions before drag starts
+        let dragStartPositions = new Map();
+        // ======================================
+
         // Helper to mix color with base for opaque result
         function mixWithBase(color, baseColor, alpha) {
             const h2d = (h) => parseInt(h, 16);
@@ -257,6 +268,9 @@ const vscode = acquireVsCodeApi();
             draggedBlock = { element, block };
             element.classList.add('dragging');
             
+            // Record position for undo
+            recordDragStartPositions([block.id], 'block');
+            
             // Bring block to front by incrementing z-index
             topZIndex++;
             element.style.zIndex = topZIndex;
@@ -303,6 +317,8 @@ const vscode = acquireVsCodeApi();
         function stopDrag() {
             if (draggedBlock) {
                 draggedBlock.element.classList.remove('dragging');
+                // Record undo action before clearing reference
+                recordDragEndAction();
                 draggedBlock = null;
                 saveState();
             }
@@ -906,18 +922,21 @@ const vscode = acquireVsCodeApi();
             }
             isOverDropzone = false;
             
-            // Store initial positions
+            // Store initial positions for both drag operation and undo
             initialPositions.clear();
+            dragStartPositions.clear();
             selectedBlocks.forEach(id => {
                 const block = blocks.find(b => b.id === id);
                 if (block) {
                     initialPositions.set(id, { x: block.x, y: block.y });
+                    dragStartPositions.set(id, { x: block.x, y: block.y, type: 'block' });
                 }
             });
             selectedCards.forEach(id => {
                 const card = cards.find(c => c.id === id);
                 if (card) {
                     initialPositions.set(id, { x: card.x, y: card.y });
+                    dragStartPositions.set(id, { x: card.x, y: card.y, type: 'card' });
                 }
             });
             
@@ -1028,10 +1047,11 @@ const vscode = acquireVsCodeApi();
                             moveCardToStash(cardId);
                         });
 
-                        // Clear selection
+                        // Clear selection - don't record undo for stash moves
                         selectedCards.clear();
                         panelStash.classList.remove('drag-over');
                         initialPositions.clear();
+                        dragStartPositions.clear();
                         document.removeEventListener('mousemove', onMultiDrag);
                         document.removeEventListener('mouseup', stopMultiDrag);
                         return;
@@ -1040,6 +1060,8 @@ const vscode = acquireVsCodeApi();
 
                 panelStash.classList.remove('drag-over');
                 initialPositions.clear();
+                // Record undo action for position changes
+                recordDragEndAction();
                 saveState();
             }
             document.removeEventListener('mousemove', onMultiDrag);
@@ -1111,6 +1133,152 @@ const vscode = acquireVsCodeApi();
             }
             performSave();
         }
+
+        // ========== Undo/Redo Functions ==========
+        /**
+         * Push an action to the undo stack
+         * @param {Object} action - Action object with type and items
+         */
+        function pushUndoAction(action) {
+            if (!action || !action.items || action.items.length === 0) return;
+            
+            undoStack.push(action);
+            // Limit stack size
+            if (undoStack.length > MAX_UNDO_HISTORY) {
+                undoStack.shift();
+            }
+            // Clear redo stack when new action is performed
+            redoStack = [];
+        }
+
+        /**
+         * Undo the last whiteboard action (position change)
+         */
+        function undo() {
+            if (undoStack.length === 0) return;
+            
+            const action = undoStack.pop();
+            
+            // Restore previous positions
+            action.items.forEach(item => {
+                if (item.type === 'block') {
+                    const block = blocks.find(b => b.id === item.id);
+                    if (block) {
+                        block.x = item.before.x;
+                        block.y = item.before.y;
+                        updateElementPosition(item.id, block.x, block.y);
+                    }
+                } else if (item.type === 'card') {
+                    const card = cards.find(c => c.id === item.id);
+                    if (card) {
+                        card.x = item.before.x;
+                        card.y = item.before.y;
+                        updateElementPosition(item.id, card.x, card.y);
+                    }
+                }
+            });
+            
+            // Push to redo stack
+            redoStack.push(action);
+            
+            saveState();
+        }
+
+        /**
+         * Redo the last undone whiteboard action
+         */
+        function redo() {
+            if (redoStack.length === 0) return;
+            
+            const action = redoStack.pop();
+            
+            // Apply the action again
+            action.items.forEach(item => {
+                if (item.type === 'block') {
+                    const block = blocks.find(b => b.id === item.id);
+                    if (block) {
+                        block.x = item.after.x;
+                        block.y = item.after.y;
+                        updateElementPosition(item.id, block.x, block.y);
+                    }
+                } else if (item.type === 'card') {
+                    const card = cards.find(c => c.id === item.id);
+                    if (card) {
+                        card.x = item.after.x;
+                        card.y = item.after.y;
+                        updateElementPosition(item.id, card.x, card.y);
+                    }
+                }
+            });
+            
+            // Push back to undo stack
+            undoStack.push(action);
+            
+            saveState();
+        }
+
+        /**
+         * Update an element's visual position using transform
+         */
+        function updateElementPosition(id, x, y) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
+            }
+        }
+
+        /**
+         * Record positions before drag starts (called at drag start)
+         */
+        function recordDragStartPositions(itemIds, itemType) {
+            dragStartPositions.clear();
+            itemIds.forEach(id => {
+                let item;
+                if (itemType === 'block') {
+                    item = blocks.find(b => b.id === id);
+                } else if (itemType === 'card') {
+                    item = cards.find(c => c.id === id);
+                }
+                if (item) {
+                    dragStartPositions.set(id, { x: item.x, y: item.y, type: itemType });
+                }
+            });
+        }
+
+        /**
+         * Create and push undo action after drag ends
+         */
+        function recordDragEndAction() {
+            if (dragStartPositions.size === 0) return;
+            
+            const items = [];
+            dragStartPositions.forEach((before, id) => {
+                let item;
+                if (before.type === 'block') {
+                    item = blocks.find(b => b.id === id);
+                } else if (before.type === 'card') {
+                    item = cards.find(c => c.id === id);
+                }
+                if (item) {
+                    // Only record if position actually changed
+                    if (item.x !== before.x || item.y !== before.y) {
+                        items.push({
+                            id: id,
+                            type: before.type,
+                            before: { x: before.x, y: before.y },
+                            after: { x: item.x, y: item.y }
+                        });
+                    }
+                }
+            });
+            
+            if (items.length > 0) {
+                pushUndoAction({ type: 'move', items: items });
+            }
+            
+            dragStartPositions.clear();
+        }
+        // ==========================================
 
         function loadState(state) {
             blocks = state.blocks || [];
@@ -1363,6 +1531,9 @@ const vscode = acquireVsCodeApi();
             draggedCard = { element, card };
             element.classList.add('dragging');
             
+            // Record position for undo
+            recordDragStartPositions([card.id], 'card');
+            
             // Bring card to front by incrementing z-index
             topZIndex++;
             element.style.zIndex = topZIndex;
@@ -1441,6 +1612,8 @@ const vscode = acquireVsCodeApi();
                         stashDropzone.classList.remove('drag-over');
                         panelStash.classList.remove('drag-over');
                         draggedCard = null;
+                        // Clear drag positions - don't record undo for stash moves
+                        dragStartPositions.clear();
 
                         moveCardToStash(cardId);
 
@@ -1453,6 +1626,8 @@ const vscode = acquireVsCodeApi();
                 stashDropzone.classList.remove('drag-over');
                 panelStash.classList.remove('drag-over');
                 draggedCard.element.classList.remove('dragging');
+                // Record undo action before clearing reference
+                recordDragEndAction();
                 draggedCard = null;
                 saveState();
             }
@@ -1553,7 +1728,7 @@ const vscode = acquireVsCodeApi();
                 id: 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                 x: x,
                 y: y,
-                width: 450,
+                width: 400,
                 height: 300,
                 filePath: filePath,
                 lastModified: Date.now() // Add timestamp for proper sorting in list
@@ -2391,9 +2566,27 @@ const vscode = acquireVsCodeApi();
         // Also support Space+drag for panning (like in design tools)
         let spacePressed = false;
         document.addEventListener('keydown', (e) => {
-            // Skip all keyboard shortcuts if editing text
-            if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {
-                // Only handle Space for panning if not in text input
+            const isEditing = document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT';
+            
+            // Handle Cmd/Ctrl+Z (Undo) and Cmd/Ctrl+Shift+Z (Redo)
+            if ((e.metaKey || e.ctrlKey) && e.code === 'KeyZ') {
+                if (isEditing) {
+                    // Let native browser handle text undo/redo
+                    return;
+                }
+                
+                // Whiteboard undo/redo
+                e.preventDefault();
+                if (e.shiftKey) {
+                    redo();
+                } else {
+                    undo();
+                }
+                return;
+            }
+            
+            // Skip other keyboard shortcuts if editing text
+            if (isEditing) {
                 return;
             }
             
